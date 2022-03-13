@@ -25,6 +25,7 @@ import { CoreSites } from '@services/sites';
 import { makeSingleton } from '@singletons';
 import { CoreCourseModuleData } from './course-helper';
 import { CoreNavigationOptions } from '@services/navigator';
+import { CoreIonicColorNames } from '@singletons/colors';
 
 /**
  * Interface that all course module handlers must implement.
@@ -146,7 +147,7 @@ export interface CoreCourseModuleHandlerData {
     /**
      * The color of the extra badge. Default: primary.
      */
-    extraBadgeColor?: string;
+    extraBadgeColor?: CoreIonicColorNames;
 
     /**
      * Whether to display a button to download/refresh the module if it's downloadable.
@@ -202,10 +203,10 @@ export interface CoreCourseModuleMainComponent {
      * Refresh the data.
      *
      * @param refresher Refresher.
-     * @param done Function to call when done.
+     * @param showErrors If show errors to the user of hide them.
      * @return Promise resolved when done.
      */
-    doRefresh(refresher?: IonRefresher, done?: () => void): Promise<void>;
+    doRefresh(refresher?: IonRefresher | null, showErrors?: boolean): Promise<void>;
 }
 
 /**

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Component, OnInit, Input, OnDestroy, OnChanges, SimpleChange } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ModalOptions } from '@ionic/core';
 import { CoreEventObserver, CoreEvents } from '@singletons/events';
 import { CoreTimeUtils } from '@services/utils/time';
@@ -26,7 +26,7 @@ import { CoreSite } from '@classes/site';
 import { CoreUtils } from '@services/utils/utils';
 import { CoreDomUtils } from '@services/utils/dom';
 import { CoreTextUtils } from '@services/utils/text';
-import { AddonCourseCompletion } from '@/addons/coursecompletion/services/coursecompletion';
+import { AddonCourseCompletion } from '@addons/coursecompletion/services/coursecompletion';
 import { AddonBlockMyOverviewFilterOptionsComponent } from '../filteroptions/filteroptions';
 import { IonSearchbar } from '@ionic/angular';
 import moment from 'moment';
@@ -39,10 +39,9 @@ const FILTER_PRIORITY: AddonBlockMyOverviewTimeFilters[] = ['all', 'inprogress',
 @Component({
     selector: 'addon-block-myoverview',
     templateUrl: 'addon-block-myoverview.html',
+    styleUrls: ['myoverview.scss'],
 })
-export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implements OnInit, OnChanges, OnDestroy {
-
-    @Input() downloadEnabled = false;
+export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implements OnInit, OnDestroy {
 
     filteredCourses: CoreEnrolledCourseDataWithOptions[] = [];
 
@@ -78,10 +77,8 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
         component: AddonBlockMyOverviewFilterOptionsComponent,
     };
 
-    layouts: AddonBlockMyOverviewLayoutOptions = {
-        options: [],
-        selected: 'card',
-    };
+    isLayoutSwitcherAvailable = false;
+    layout: AddonBlockMyOverviewLayouts = 'list';
 
     sort: AddonBlockMyOverviewSortOptions = {
         shortnameEnabled: false,
@@ -144,9 +141,9 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
 
         promises.push(this.currentSite.getLocalSiteConfig(
             'AddonBlockMyOverviewLayout',
-            this.layouts.selected,
+            this.layout,
         ).then((value) => {
-            this.layouts.selected = value;
+            this.layout = value;
 
             return;
         }));
@@ -195,16 +192,6 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
         Promise.all(promises).finally(() => {
             super.ngOnInit();
         });
-    }
-
-    /**
-     * @inheritdoc
-     */
-    ngOnChanges(changes: {[name: string]: SimpleChange}): void {
-        if (changes.downloadEnabled && !changes.downloadEnabled.previousValue && this.downloadEnabled && this.loaded) {
-            // Download all courses is enabled now, initialize it.
-            this.initPrefetchCoursesIcons();
-        }
     }
 
     /**
@@ -352,10 +339,10 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
      * @param layouts Config available layouts.
      */
     protected loadLayouts(layouts?: string[]): void {
-        this.layouts.options = [];
+        const layoutsOptions: AddonBlockMyOverviewLayouts[] = [];
 
         if (layouts === undefined) {
-            this.layouts.options = ['card', 'list'];
+            this.isLayoutSwitcherAvailable = true;
 
             return;
         }
@@ -366,19 +353,21 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
             }
 
             const validLayout: AddonBlockMyOverviewLayouts = layout == 'summary' ? 'list' : layout as AddonBlockMyOverviewLayouts;
-            if (!this.layouts.options.includes(validLayout)) {
-                this.layouts.options.push(validLayout);
+            if (!layoutsOptions.includes(validLayout)) {
+                layoutsOptions.push(validLayout);
             }
         });
 
-        // If no layout is available use card.
-        if (this.layouts.options.length == 0) {
-            this.layouts.options = ['card'];
+        // If no layout is available use list.
+        if (layoutsOptions.length == 0) {
+            layoutsOptions.push('list');
         }
 
-        if (!this.layouts.options.includes(this.layouts.selected)) {
-            this.layouts.selected = this.layouts.options[0];
+        if (!layoutsOptions.includes(this.layout)) {
+            this.layout = layoutsOptions[0];
         }
+
+        this.isLayoutSwitcherAvailable = layoutsOptions.length > 1;
     }
 
     /**
@@ -431,7 +420,7 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
      * @return Promise resolved when done.
      */
     async initPrefetchCoursesIcons(): Promise<void> {
-        if (this.prefetchIconsInitialized || !this.downloadEnabled) {
+        if (this.prefetchIconsInitialized) {
             // Already initialized.
             return;
         }
@@ -644,15 +633,15 @@ export class AddonBlockMyOverviewComponent extends CoreBlockBaseComponent implem
     }
 
     /**
-     * Saves layout value.
+     * Toggle layout value.
      *
      * @param layout New layout.
      * @return Promise resolved when done.
      */
-    async saveLayout(layout: AddonBlockMyOverviewLayouts): Promise<void> {
-        this.layouts.selected = layout;
+    async toggleLayout(layout: AddonBlockMyOverviewLayouts): Promise<void> {
+        this.layout = layout;
 
-        await this.currentSite.setLocalSiteConfig('AddonBlockMyOverviewLayout', this.layouts.selected);
+        await this.currentSite.setLocalSiteConfig('AddonBlockMyOverviewLayout', this.layout);
     }
 
     /**
@@ -712,11 +701,6 @@ export type AddonBlockMyOverviewFilterOptions = {
     }[];
     customSelected?: string;
     count: number;
-};
-
-type AddonBlockMyOverviewLayoutOptions = {
-    options: AddonBlockMyOverviewLayouts[];
-    selected: AddonBlockMyOverviewLayouts;
 };
 
 type AddonBlockMyOverviewSortOptions = {

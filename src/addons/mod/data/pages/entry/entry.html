@@ -16,7 +16,8 @@
         (ionRefresh)="refreshDatabase($event.target)">
         <ion-refresher-content pullingText="{{ 'core.pulltorefresh' | translate }}"></ion-refresher-content>
     </ion-refresher>
-    <core-loading [hideUntil]="entryLoaded && (isPullingToRefresh || !renderingEntry && !loadingRating && !loadingComments)">
+    <core-loading [hideUntil]="entryLoaded && (isPullingToRefresh || !renderingEntry && !loadingRating && !loadingComments)"
+        class="list-item-limited-width">
         <!-- Database entries found to be synchronized -->
         <ion-card class="core-warning-card" *ngIf="entry && entry.hasOffline">
             <ion-item>
@@ -25,7 +26,7 @@
             </ion-item>
         </ion-card>
 
-        <ion-item class="ion-text-wrap" *ngIf="groupInfo && (groupInfo.separateGroups || groupInfo.visibleGroups)">
+        <ion-item class="ion-text-wrap core-group-selector" *ngIf="groupInfo && (groupInfo.separateGroups || groupInfo.visibleGroups)">
             <ion-label id="addon-data-groupslabel">
                 <ng-container *ngIf="groupInfo.separateGroups">{{ 'core.groupsvisible' | translate }}</ng-container>
                 <ng-container *ngIf="groupInfo.visibleGroups">{{ 'core.groupsseparate' | translate }}</ng-container>
@@ -60,21 +61,23 @@
             (onLoading)="setLoadingComments($event)" [showItem]="true">
         </core-comments>
 
-        <ion-grid *ngIf="hasPrevious || hasNext">
-            <ion-row class="ion-align-items-center">
-                <ion-col *ngIf="hasPrevious">
-                    <ion-button expand="block" fill="outline" (click)="gotoEntry(offset! -1)">
-                        <ion-icon name="fas-chevron-left" slot="start" aria-hidden="true"></ion-icon>
-                        {{ 'core.previous' | translate }}
+        <div collapsible-footer *ngIf="entryLoaded && hasPrevious || hasNext" slot="fixed" appearOnBottom>
+            <ion-row class="ion-justify-content-between ion-align-items-center ion-no-padding ion-wrap">
+                <ion-col class="ion-text-start ion-no-padding core-navigation-arrow" size="auto">
+                    <ion-button [disabled]="!hasPrevious" fill="clear" [attr.aria-label]="'core.previous' | translate"
+                        (click)="gotoEntry(offset! -1)">
+                        <ion-icon name="fas-chevron-left" slot="icon-only" aria-hidden="true"></ion-icon>
                     </ion-button>
                 </ion-col>
-                <ion-col *ngIf="hasNext">
-                    <ion-button expand="block" (click)="gotoEntry(offset! + 1)">
-                        {{ 'core.next' | translate }}
-                        <ion-icon name="fas-chevron-right" slot="end" aria-hidden="true"></ion-icon>
+                <ion-col class="ion-text-center">
+                </ion-col>
+                <ion-col class="ion-text-end ion-no-padding core-navigation-arrow" size="auto">
+                    <ion-button [disabled]="!hasNext" fill="clear" [attr.aria-label]=" 'core.next' | translate"
+                        (click)="gotoEntry(offset! + 1)">
+                        <ion-icon name="fas-chevron-right" slot="icon-only" aria-hidden="true"></ion-icon>
                     </ion-button>
                 </ion-col>
             </ion-row>
-        </ion-grid>
+        </div>
     </core-loading>
 </ion-content>

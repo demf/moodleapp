@@ -49,6 +49,7 @@ export class CoreUtilsProvider {
     protected iabInstance?: InAppBrowserObject;
     protected uniqueIds: {[name: string]: number} = {};
     protected qrScanData?: {deferred: PromiseDefer<string>; observable: Subscription};
+    protected initialColorSchemeContent = 'light dark';
 
     constructor() {
         this.logger = CoreLogger.getInstance('CoreUtilsProvider');
@@ -858,11 +859,17 @@ export class CoreUtilsProvider {
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     isWebServiceError(error: any): boolean {
-        return error && (error.warningcode !== undefined || (error.errorcode !== undefined &&
-                error.errorcode != 'userdeleted' && error.errorcode != 'upgraderunning' &&
+        return error && (
+            error.warningcode !== undefined ||
+            (
+                error.errorcode !== undefined && error.errorcode != 'userdeleted' && error.errorcode != 'upgraderunning' &&
                 error.errorcode != 'forcepasswordchangenotice' && error.errorcode != 'usernotfullysetup' &&
                 error.errorcode != 'sitepolicynotagreed' && error.errorcode != 'sitemaintenance' &&
-                !this.isExpiredTokenError(error)));
+                error.errorcode != 'wsaccessusersuspended' && error.errorcode != 'wsaccessuserdeleted' &&
+                !this.isExpiredTokenError(error)
+            ) ||
+            error.status && error.status >= 400 // CoreHttpError, assume status 400 and above are like WebService errors.
+        );
     }
 
     /**
@@ -1254,7 +1261,7 @@ export class CoreUtilsProvider {
         const mapped = {};
         objects.forEach((item) => {
             const keyValue = item[keyName] as string;
-            const key = prefixSubstr > 0 ? keyValue.substr(prefixSubstr) : keyValue;
+            const key = prefixSubstr > 0 ? keyValue.substring(prefixSubstr) : keyValue;
             mapped[key] = item[valueName];
         });
 
@@ -1540,7 +1547,6 @@ export class CoreUtilsProvider {
     /**
      * Debounce a function so consecutive calls are ignored until a certain time has passed since the last call.
      *
-     * @param context The context to apply to the function.
      * @param fn Function to debounce.
      * @param delay Time that must pass until the function is called.
      * @return Debounced function.
@@ -1555,6 +1561,31 @@ export class CoreUtilsProvider {
         };
 
         return debounced;
+    }
+
+    /**
+     * Throttle a function so consecutive calls are ignored until a certain time has passed since the last executed call.
+     *
+     * @param fn Function to throttle.
+     * @param duration Time that must pass until the function is called.
+     * @return Throttled function.
+     */
+    throttle<T extends unknown[]>(fn: (...args: T) => unknown, duration: number): (...args: T) => void {
+        let shouldWait = false;
+
+        const throttled = (...args: T): void => {
+            if (!shouldWait) {
+                fn.apply(null, args);
+
+                shouldWait = true;
+
+                setTimeout(() => {
+                    shouldWait = false;
+                }, duration);
+            }
+        };
+
+        return throttled;
     }
 
     /**
@@ -1621,6 +1652,13 @@ export class CoreUtilsProvider {
 
                 document.body.classList.add('core-scanning-qr');
 
+                // Set color-scheme to 'normal', otherwise the camera isn't seen in Android.
+                const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
+                if (colorSchemeMeta) {
+                    this.initialColorSchemeContent = colorSchemeMeta.getAttribute('content') || this.initialColorSchemeContent;
+                    colorSchemeMeta.setAttribute('content', 'normal');
+                }
+
                 return this.qrScanData.deferred.promise;
             } catch (e) {
                 this.stopScanQR(e, true);
@@ -1649,6 +1687,10 @@ export class CoreUtilsProvider {
 
         // Hide camera preview.
         document.body.classList.remove('core-scanning-qr');
+
+        // Set color-scheme to the initial value.
+        document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', this.initialColorSchemeContent);
+
         QRScanner.hide();
         QRScanner.destroy();
 
@@ -1721,6 +1763,34 @@ export class CoreUtilsProvider {
         const openFileAction = options.iOSOpenFileAction ?? CoreConstants.CONFIG.iOSDefaultOpenFileAction;
 
         return CoreApp.isIOS() && openFileAction == OpenFileAction.OPEN_WITH;
+    }
+
+    /**
+     * Check whether the given cookie is set.
+     *
+     * @param name Cookie name.
+     * @returns Whether the cookie is set.
+     */
+    hasCookie(name: string): boolean {
+        return new RegExp(`(\\s|;|^)${name}=`).test(document.cookie ?? '');
+    }
+
+    /**
+     * Read a cookie.
+     *
+     * @param name Cookie name.
+     * @return Cookie value.
+     */
+    getCookie(name: string): string | null {
+        const cookies = (document.cookie ?? '').split(';').reduce((cookies, cookie) => {
+            const [name, value] = cookie.trim().split('=');
+
+            cookies[name] = value;
+
+            return cookies;
+        }, {});
+
+        return cookies[name] ?? null;
     }
 
 }

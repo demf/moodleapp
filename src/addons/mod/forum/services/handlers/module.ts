@@ -19,10 +19,11 @@ import { CoreEvents } from '@singletons/events';
 import { CoreSites } from '@services/sites';
 import { CoreUtils } from '@services/utils/utils';
 import { CoreCourseModuleHandler, CoreCourseModuleHandlerData } from '@features/course/services/module-delegate';
-import { CoreConstants } from '@/core/constants';
+import { CoreConstants, ModPurpose } from '@/core/constants';
 import { AddonModForumIndexComponent } from '../../components/index';
 import { CoreModuleHandlerBase } from '@features/course/classes/module-base-handler';
 import { CoreCourseModuleData } from '@features/course/services/course-helper';
+import { CoreIonicColorNames } from '@singletons/colors';
 
 /**
  * Handler to support forum modules.
@@ -48,6 +49,7 @@ export class AddonModForumModuleHandlerService extends CoreModuleHandlerBase imp
         [CoreConstants.FEATURE_SHOW_DESCRIPTION]: true,
         [CoreConstants.FEATURE_RATE]: true,
         [CoreConstants.FEATURE_PLAGIARISM]: true,
+        [CoreConstants.FEATURE_MOD_PURPOSE]: ModPurpose.MOD_PURPOSE_COLLABORATION,
     };
 
     /**
@@ -57,7 +59,7 @@ export class AddonModForumModuleHandlerService extends CoreModuleHandlerBase imp
         const data = await super.getData(module, courseId);
 
         if ('afterlink' in module && !!module.afterlink) {
-            data.extraBadgeColor = '';
+            data.extraBadgeColor = undefined;
             const match = />(\d+)[^<]+/.exec(module.afterlink);
             data.extraBadge = match ? Translate.instant('addon.mod_forum.unreadpostsnumber', { $a : match[1] }) : '';
         } else {
@@ -111,7 +113,7 @@ export class AddonModForumModuleHandlerService extends CoreModuleHandlerBase imp
         }
 
         data.extraBadge = Translate.instant('core.loading');
-        data.extraBadgeColor = 'light';
+        data.extraBadgeColor = CoreIonicColorNames.DARK;
 
         await CoreUtils.ignoreErrors(AddonModForum.invalidateForumData(courseId));
 
@@ -119,7 +121,7 @@ export class AddonModForumModuleHandlerService extends CoreModuleHandlerBase imp
             // Handle unread posts.
             const forum = await AddonModForum.getForum(courseId, moduleId, { siteId });
 
-            data.extraBadgeColor = '';
+            data.extraBadgeColor = undefined;
             data.extraBadge = forum.unreadpostscount
                 ? Translate.instant(
                     'addon.mod_forum.unreadpostsnumber',
@@ -128,7 +130,7 @@ export class AddonModForumModuleHandlerService extends CoreModuleHandlerBase imp
                 : '';
         } catch {
             // Ignore errors.
-            data.extraBadgeColor = '';
+            data.extraBadgeColor = undefined;
             data.extraBadge = '';
         }
     }

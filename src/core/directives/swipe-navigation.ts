@@ -14,9 +14,9 @@
 
 import {  AfterViewInit, Directive, ElementRef, Input, OnDestroy } from '@angular/core';
 import { CoreSwipeNavigationItemsManager } from '@classes/items-management/swipe-navigation-items-manager';
-import { Gesture } from '@ionic/angular';
+import { Gesture, GestureDetail } from '@ionic/angular';
 import { CoreScreen } from '@services/screen';
-import { GestureController } from '@singletons';
+import { GestureController, Platform } from '@singletons';
 
 const ACTIVATION_THRESHOLD = 150;
 const SWIPE_FRICTION = 0.6;
@@ -56,7 +56,9 @@ export class CoreSwipeNavigationDirective implements AfterViewInit, OnDestroy {
             el: this.element,
             gestureName: 'swipe',
             threshold: 10,
+            direction: 'x',
             gesturePriority: 10,
+            maxAngle: 20,
             canStart: () => this.enabled,
             onStart: () => {
                 style.transition = '';
@@ -65,70 +67,62 @@ export class CoreSwipeNavigationDirective implements AfterViewInit, OnDestroy {
                 style.transform = `translateX(${ev.deltaX * SWIPE_FRICTION }px)`;
             },
             onEnd: (ev) => {
-                style.transition = '.5s ease-out';
-
-                if (ev.deltaX > ACTIVATION_THRESHOLD) {
-                    this.manager?.hasNextItem().then((hasNext) => {
-                        if (hasNext) {
-                            this.preventClickOnElement();
-
-                            style.transform = 'translateX(100%) !important';
-                            this.swipeRight();
-                        } else {
-                            style.transform = '';
-                        }
-
-                        return;
-                    });
-
-                    return;
-                }
-
-                if (ev.deltaX < -ACTIVATION_THRESHOLD) {
-                    this.manager?.hasPreviousItem().then((hasPrevious) => {
-                        if (hasPrevious) {
-
-                            this.preventClickOnElement();
-
-                            style.transform = 'translateX(-100%) !important';
-                            this.swipeLeft();
-                        } else {
-                            style.transform = '';
-                        }
-
-                        return;
-                    });
-
-                    return;
-                }
-
-                style.transform = '';
-
+                this.onRelease(ev);
             },
         });
         this.swipeGesture.enable();
     }
 
     /**
-     * Swipe to previous item.
+     * Move to item to the left.
      */
     swipeLeft(): void {
         if (!this.enabled) {
             return;
         }
 
-        this.manager?.navigateToPreviousItem();
+        Platform.isRTL
+            ? this.manager?.navigateToPreviousItem()
+            : this.manager?.navigateToNextItem();
     }
 
     /**
-     * Swipe to next item.
+     * Move to item to the right.
      */
     swipeRight(): void {
         if (!this.enabled) {
             return;
         }
 
-        this.manager?.navigateToNextItem();
+        Platform.isRTL
+            ? this.manager?.navigateToNextItem()
+            : this.manager?.navigateToPreviousItem();
+    }
+
+    /**
+     * Check whether there is an item to the right of the current selection.
+     */
+    protected async hasItemRight(): Promise<boolean> {
+        if (!this.manager) {
+            return false;
+        }
+
+        return Platform.isRTL
+            ? await this.manager.hasNextItem()
+            : await this.manager.hasPreviousItem();
+    }
+
+    /**
+     * Check whether there is an item to the left of the current selection.
+     */
+    protected async hasItemLeft(): Promise<boolean> {
+        if (!this.manager) {
+            return false;
+        }
+
+        return Platform.isRTL
+            ? await this.manager.hasPreviousItem()
+            : await this.manager.hasNextItem();
     }
 
     /**
@@ -153,6 +147,35 @@ export class CoreSwipeNavigationDirective implements AfterViewInit, OnDestroy {
      */
     ngOnDestroy(): void {
         this.swipeGesture?.destroy();
+    }
+
+    /**
+     * Handle swipe release event.
+     *
+     * @param event Event.
+     */
+    protected async onRelease(event: GestureDetail): Promise<void> {
+        this.element.style.transition = '.5s ease-out';
+
+        if (event.deltaX > ACTIVATION_THRESHOLD && await this.hasItemRight()) {
+            this.preventClickOnElement();
+            this.swipeRight();
+
+            this.element.style.transform = 'translateX(100%) !important';
+
+            return;
+        }
+
+        if (event.deltaX < -ACTIVATION_THRESHOLD && await this.hasItemLeft()) {
+            this.element.style.transform = 'translateX(-100%) !important';
+
+            this.preventClickOnElement();
+            this.swipeLeft();
+
+            return;
+        }
+
+        this.element.style.transform = '';
     }
 
 }

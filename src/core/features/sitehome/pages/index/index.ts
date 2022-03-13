@@ -26,7 +26,7 @@ import { CoreEventObserver, CoreEvents } from '@singletons/events';
 import { CoreCourseHelper, CoreCourseModuleData } from '@features/course/services/course-helper';
 import { CoreCourseModuleDelegate } from '@features/course/services/module-delegate';
 import { CoreCourseModulePrefetchDelegate } from '@features/course/services/module-prefetch-delegate';
-import { CoreNavigator } from '@services/navigator';
+import { CoreNavigationOptions, CoreNavigator } from '@services/navigator';
 import { CoreBlockHelper } from '@features/block/services/block-helper';
 import { CoreUtils } from '@services/utils/utils';
 
@@ -36,6 +36,7 @@ import { CoreUtils } from '@services/utils/utils';
 @Component({
     selector: 'page-core-sitehome-index',
     templateUrl: 'index.html',
+    styleUrls: ['index.scss'],
 })
 export class CoreSiteHomeIndexPage implements OnInit, OnDestroy {
 
@@ -72,8 +73,15 @@ export class CoreSiteHomeIndexPage implements OnInit, OnDestroy {
 
         const module = CoreNavigator.getRouteParam<CoreCourseModuleData>('module');
         if (module) {
-            const modParams = CoreNavigator.getRouteParam<Params>('modParams');
-            CoreCourseHelper.openModule(module, this.siteHomeId, undefined, modParams);
+            let modNavOptions = CoreNavigator.getRouteParam<CoreNavigationOptions>('modNavOptions');
+            if (!modNavOptions) {
+                // Fallback to old way of passing params. @deprecated since 4.0.
+                const modParams = CoreNavigator.getRouteParam<Params>('modParams');
+                if (modParams) {
+                    modNavOptions = { params: modParams };
+                }
+            }
+            CoreCourseHelper.openModule(module, this.siteHomeId, { modNavOptions });
         }
 
         this.loadContent().finally(() => {
@@ -172,20 +180,6 @@ export class CoreSiteHomeIndexPage implements OnInit, OnDestroy {
                 refresher?.complete();
             });
         });
-    }
-
-    /**
-     * Open page to manage courses storage.
-     */
-    manageCoursesStorage(): void {
-        CoreNavigator.navigateToSitePath('/storage');
-    }
-
-    /**
-     * Open page to manage course storage.
-     */
-    manageCourseStorage(): void {
-        CoreNavigator.navigateToSitePath('/storage/' + this.siteHomeId);
     }
 
     /**

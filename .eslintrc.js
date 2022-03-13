@@ -271,6 +271,7 @@ testsConfig['rules']['padded-blocks'] = [
         switches: 'never',
     },
 ];
+testsConfig['rules']['jest/expect-expect'] = 'off';
 testsConfig['plugins'].push('jest');
 testsConfig['extends'].push('plugin:jest/recommended');
 
@@ -291,6 +292,7 @@ module.exports = {
                 '@angular-eslint/template/no-positive-tabindex': 'error',
                 '@angular-eslint/template/accessibility-table-scope': 'error',
                 '@angular-eslint/template/accessibility-valid-aria': 'error',
+                '@angular-eslint/template/no-duplicate-attributes': 'error',
             },
         },
         {

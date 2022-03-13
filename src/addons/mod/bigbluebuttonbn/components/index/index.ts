@@ -71,21 +71,18 @@ export class AddonModBBBIndexComponent extends CoreCourseModuleMainActivityCompo
     /**
      * @inheritdoc
      */
-    protected async fetchContent(refresh: boolean = false): Promise<void> {
-        try {
-            this.bbb = await AddonModBBB.getBBB(this.courseId, this.module.id);
+    protected async fetchContent(): Promise<void> {
+        this.bbb = await AddonModBBB.getBBB(this.courseId, this.module.id);
 
-            this.description = this.bbb.intro;
-            this.dataRetrieved.emit(this.bbb);
+        this.description = this.bbb.intro;
+        this.dataRetrieved.emit(this.bbb);
 
-            this.groupInfo = await CoreGroups.getActivityGroupInfo(this.module.id, false);
+        this.groupInfo = await CoreGroups.getActivityGroupInfo(this.module.id, false);
 
-            this.groupId = CoreGroups.validateGroupId(this.groupId, this.groupInfo);
+        this.groupId = CoreGroups.validateGroupId(this.groupId, this.groupInfo);
 
-            await this.fetchMeetingInfo();
-        } finally {
-            this.fillContextMenu(refresh);
-        }
+        await this.fetchMeetingInfo();
+
     }
 
     /**
@@ -98,7 +95,9 @@ export class AddonModBBBIndexComponent extends CoreCourseModuleMainActivityCompo
             return;
         }
 
-        this.meetingInfo = await AddonModBBB.getMeetingInfo(this.bbb.id, this.groupId);
+        this.meetingInfo = await AddonModBBB.getMeetingInfo(this.bbb.id, this.groupId, {
+            cmId: this.module.id,
+        });
 
         if (this.meetingInfo.statusrunning && this.meetingInfo.userlimit > 0) {
             const count = (this.meetingInfo.participantcount || 0) + (this.meetingInfo.moderatorcount || 0);
@@ -118,14 +117,14 @@ export class AddonModBBBIndexComponent extends CoreCourseModuleMainActivityCompo
             return;
         }
 
-        this.loaded = false;
+        this.showLoading = true;
 
         try {
             await AddonModBBB.invalidateAllGroupsMeetingInfo(this.bbb.id);
 
             await this.fetchMeetingInfo();
         } finally {
-            this.loaded = true;
+            this.showLoading = false;
         }
     }
 
@@ -151,14 +150,14 @@ export class AddonModBBBIndexComponent extends CoreCourseModuleMainActivityCompo
      * @return Promise resolved when done.
      */
     async groupChanged(): Promise<void> {
-        this.loaded = false;
+        this.showLoading = true;
 
         try {
             await this.fetchMeetingInfo();
         } catch (error) {
             CoreDomUtils.showErrorModal(error);
         } finally {
-            this.loaded = true;
+            this.showLoading = false;
         }
     }
 
@@ -173,7 +172,9 @@ export class AddonModBBBIndexComponent extends CoreCourseModuleMainActivityCompo
         try {
             const joinUrl = await AddonModBBB.getJoinUrl(this.module.id, this.groupId);
 
-            CoreUtils.openInBrowser(joinUrl);
+            CoreUtils.openInBrowser(joinUrl, {
+                showBrowserWarning: false,
+            });
 
             this.updateMeetingInfo();
         } catch (error) {

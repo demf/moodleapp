@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { CoreConstants } from '@/core/constants';
+import { CoreConstants, ModPurpose } from '@/core/constants';
 import { Injectable, Type } from '@angular/core';
 import { CoreModuleHandlerBase } from '@features/course/classes/module-base-handler';
 import { CoreCourse } from '@features/course/services/course';
@@ -20,6 +20,7 @@ import { CoreCourseModuleData } from '@features/course/services/course-helper';
 import { CoreCourseModuleHandler, CoreCourseModuleHandlerData } from '@features/course/services/module-delegate';
 import { CoreCourseModulePrefetchDelegate } from '@features/course/services/module-prefetch-delegate';
 import { CoreFileHelper } from '@services/file-helper';
+import { CoreSites } from '@services/sites';
 import { CoreMimetypeUtils } from '@services/utils/mimetype';
 import { CoreTextUtils } from '@services/utils/text';
 import { CoreTimeUtils } from '@services/utils/time';
@@ -50,6 +51,7 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
         [CoreConstants.FEATURE_GRADE_OUTCOMES]: false,
         [CoreConstants.FEATURE_BACKUP_MOODLE2]: true,
         [CoreConstants.FEATURE_SHOW_DESCRIPTION]: true,
+        [CoreConstants.FEATURE_MOD_PURPOSE]: ModPurpose.MOD_PURPOSE_CONTENT,
     };
 
     /**
@@ -92,10 +94,16 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
             },
         }];
 
-        this.getResourceData(module, courseId, handlerData).then((data) => {
-            handlerData.icon = data.icon;
-            handlerData.extraBadge = data.extra;
-            handlerData.extraBadgeColor = 'light';
+        this.getResourceData(module, courseId, handlerData).then((extra) => {
+            handlerData.extraBadge = extra;
+
+            return;
+        }).catch(() => {
+            // Ignore errors.
+        });
+
+        this.getIconSrc(module).then((icon) => {
+            handlerData.icon = icon;
 
             return;
         }).catch(() => {
@@ -132,7 +140,7 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
         module: CoreCourseModuleData,
         courseId: number,
         handlerData: CoreCourseModuleHandlerData,
-    ): Promise<AddonResourceHandlerData> {
+    ): Promise<string> {
         const promises: Promise<void>[] = [];
         let options: AddonModResourceCustomData = {};
 
@@ -160,22 +168,14 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
 
         await Promise.all(promises);
 
-        let mimetypeIcon = '';
         const extra: string[] = [];
 
         if (module.contentsinfo) {
             // No need to use the list of files.
-            const mimetype = module.contentsinfo.mimetypes[0];
-            if (mimetype) {
-                mimetypeIcon = CoreMimetypeUtils.getMimetypeIcon(mimetype);
-            }
             extra.push(CoreTextUtils.cleanTags(module.afterlink));
-
         } else if (module.contents && module.contents[0]) {
             const files = module.contents;
             const file = files[0];
-
-            mimetypeIcon = CoreMimetypeUtils.getFileIcon(file.filename || '');
 
             if (options.showsize) {
                 const size = options.filedetails
@@ -219,10 +219,7 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
             }
         }
 
-        return {
-            icon: await CoreCourse.getModuleIconSrc(module.modname, module.modicon, mimetypeIcon),
-            extra: extra.join(' '),
-        };
+        return extra.join(' ');
     }
 
     /**
@@ -231,6 +228,10 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
     async getIconSrc(module?: CoreCourseModuleData): Promise<string | undefined> {
         if (!module) {
             return;
+        }
+
+        if (CoreSites.getCurrentSite()?.isVersionGreaterEqualThan('4.0')) {
+            return await CoreCourse.getModuleIconSrc(module.modname, module.modicon);
         }
         let mimetypeIcon = '';
 
@@ -260,9 +261,3 @@ export class AddonModResourceModuleHandlerService extends CoreModuleHandlerBase 
 
 }
 export const AddonModResourceModuleHandler = makeSingleton(AddonModResourceModuleHandlerService);
-
-type AddonResourceHandlerData = {
-    icon: string;
-    extra: string;
-}
-;

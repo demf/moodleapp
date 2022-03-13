@@ -43,8 +43,12 @@ import { CoreCourseLogCronHandler } from './handlers/log-cron';
 import { CoreSitePlugins } from '@features/siteplugins/services/siteplugins';
 import { CoreCourseAutoSyncData, CoreCourseSyncProvider } from './sync';
 import { CoreTagItem } from '@features/tag/services/tag';
-import { CoreNavigator } from '@services/navigator';
+import { CoreNavigationOptions, CoreNavigator } from '@services/navigator';
 import { CoreCourseModuleDelegate } from './module-delegate';
+import { lazyMap, LazyMap } from '@/core/utils/lazy-map';
+import { asyncInstance, AsyncInstance } from '@/core/utils/async-instance';
+import { CoreDatabaseTable } from '@classes/database/database-table';
+import { CoreDatabaseCachingStrategy } from '@classes/database/database-table-proxy';
 
 const ROOT_CACHE_KEY = 'mmCourse:';
 
@@ -62,13 +66,18 @@ declare module '@singletons/events' {
 }
 
 /**
- * Completion status valid values.
+ * Course Module completion status enumeration.
  */
 export enum CoreCourseModuleCompletionStatus {
     COMPLETION_INCOMPLETE = 0,
     COMPLETION_COMPLETE = 1,
     COMPLETION_COMPLETE_PASS = 2,
     COMPLETION_COMPLETE_FAIL = 3,
+}
+
+export enum CoreCourseCompletionMode {
+    FULL = 'full',
+    BASIC = 'basic',
 }
 
 /**
@@ -125,15 +134,24 @@ export class CoreCourseProvider {
     static readonly COMPONENT = 'CoreCourse';
 
     readonly CORE_MODULES = [
-        'assign', 'assignment', 'book', 'chat', 'choice', 'data', 'database', 'date', 'external-tool',
-        'feedback', 'file', 'folder', 'forum', 'glossary', 'ims', 'imscp', 'label', 'lesson', 'lti', 'page', 'quiz',
-        'resource', 'scorm', 'survey', 'url', 'wiki', 'workshop', 'h5pactivity', 'bigbluebuttonbn',
+        'assign', 'bigbluebuttonbn', 'book', 'chat', 'choice', 'data', 'feedback', 'folder', 'forum', 'glossary', 'h5pactivity',
+        'imscp', 'label', 'lesson', 'lti', 'page', 'quiz', 'resource', 'scorm', 'survey', 'url', 'wiki', 'workshop',
     ];
 
     protected logger: CoreLogger;
+    protected statusTables: LazyMap<AsyncInstance<CoreDatabaseTable<CoreCourseStatusDBRecord>>>;
 
     constructor() {
         this.logger = CoreLogger.getInstance('CoreCourseProvider');
+        this.statusTables = lazyMap(
+            siteId => asyncInstance(
+                () => CoreSites.getSiteTable(COURSE_STATUS_TABLE, {
+                    siteId,
+                    config: { cachingStrategy: CoreDatabaseCachingStrategy.Eager },
+                    onDestroy: () => delete this.statusTables[siteId],
+                }),
+            ),
+        );
     }
 
     /**
@@ -212,7 +230,7 @@ export class CoreCourseProvider {
         const site = await CoreSites.getSite(siteId);
         this.logger.debug('Clear all course status for site ' + site.id);
 
-        await site.getDb().deleteRecords(COURSE_STATUS_TABLE);
+        await this.statusTables[site.getId()].delete();
         this.triggerCourseStatusChanged(CoreCourseProvider.ALL_COURSES_CLEARED, CoreConstants.NOT_DOWNLOADED, site.id);
     }
 
@@ -364,7 +382,7 @@ export class CoreCourseProvider {
      */
     async getCourseStatusData(courseId: number, siteId?: string): Promise<CoreCourseStatusDBRecord> {
         const site = await CoreSites.getSite(siteId);
-        const entry: CoreCourseStatusDBRecord = await site.getDb().getRecord(COURSE_STATUS_TABLE, { id: courseId });
+        const entry = await this.statusTables[site.getId()].getOneByPrimaryKey({ id: courseId });
         if (!entry) {
             throw Error('No entry found on course status table');
         }
@@ -396,16 +414,13 @@ export class CoreCourseProvider {
      * @return Resolves with an array containing downloaded course ids.
      */
     async getDownloadedCourseIds(siteId?: string): Promise<number[]> {
+        const downloadedStatuses = [CoreConstants.DOWNLOADED, CoreConstants.DOWNLOADING, CoreConstants.OUTDATED];
         const site = await CoreSites.getSite(siteId);
-        const entries: CoreCourseStatusDBRecord[] = await site.getDb().getRecordsList(
-            COURSE_STATUS_TABLE,
-            'status',
-            [
-                CoreConstants.DOWNLOADED,
-                CoreConstants.DOWNLOADING,
-                CoreConstants.OUTDATED,
-            ],
-        );
+        const entries = await this.statusTables[site.getId()].getManyWhere({
+            sql: 'status IN (?,?,?)',
+            sqlParams: downloadedStatuses,
+            js: ({ status }) => downloadedStatuses.includes(status),
+        });
 
         return entries.map((entry) => entry.id);
     }
@@ -726,8 +741,14 @@ export class CoreCourseProvider {
             moduleName = 'external-tool';
         }
 
+        let path = 'assets/img/mod/';
+        if (!CoreSites.getCurrentSite()?.isVersionGreaterEqualThan('4.0')) {
+            // @deprecatedonmoodle since Moodle 3.11.
+            path = 'assets/img/mod_legacy/';
+        }
+
         // Use default icon on core modules.
-        return 'assets/img/mod/' + moduleName + '.svg';
+        return path + moduleName + '.svg';
     }
 
     /**
@@ -1167,10 +1188,13 @@ export class CoreCourseProvider {
      * This function must be in here instead of course helper to prevent circular dependencies.
      *
      * @param course Course to open
-     * @param params Other params to pass to the course page.
+     * @param navOptions Navigation options that includes params to pass to the page.
      * @return Promise resolved when done.
      */
-    async openCourse(course: CoreCourseAnyCourseData | { id: number }, params?: Params): Promise<void> {
+    async openCourse(
+        course: CoreCourseAnyCourseData | { id: number },
+        navOptions?: CoreNavigationOptions,
+    ): Promise<void> {
         const loading = await CoreDomUtils.showModalLoading();
 
         // Wait for site plugins to be fetched.
@@ -1187,7 +1211,7 @@ export class CoreCourseProvider {
         if (!format || !CoreSitePlugins.sitePluginPromiseExists(`format_${format}`)) {
             // No custom format plugin. We don't need to wait for anything.
             loading.dismiss();
-            await CoreCourseFormatDelegate.openCourse(<CoreCourseAnyCourseData> course, params);
+            await CoreCourseFormatDelegate.openCourse(<CoreCourseAnyCourseData> course, navOptions);
 
             return;
         }
@@ -1198,7 +1222,7 @@ export class CoreCourseProvider {
 
             // The format loaded successfully, but the handlers wont be registered until all site plugins have loaded.
             if (CoreSitePlugins.sitePluginsFinishedLoading) {
-                return CoreCourseFormatDelegate.openCourse(<CoreCourseAnyCourseData> course, params);
+                return CoreCourseFormatDelegate.openCourse(<CoreCourseAnyCourseData> course, navOptions);
             }
 
             // Wait for plugins to be loaded.
@@ -1207,7 +1231,7 @@ export class CoreCourseProvider {
             const observer = CoreEvents.on(CoreEvents.SITE_PLUGINS_LOADED, () => {
                 observer?.off();
 
-                CoreCourseFormatDelegate.openCourse(<CoreCourseAnyCourseData> course, params)
+                CoreCourseFormatDelegate.openCourse(<CoreCourseAnyCourseData> course, navOptions)
                     .then(deferred.resolve).catch(deferred.reject);
             });
 
@@ -1251,7 +1275,6 @@ export class CoreCourseProvider {
         this.logger.debug(`Set previous status for course ${courseId} in site ${siteId}`);
 
         const site = await CoreSites.getSite(siteId);
-        const db = site.getDb();
         const entry = await this.getCourseStatusData(courseId, siteId);
 
         this.logger.debug(`Set previous status '${entry.status}' for course ${courseId}`);
@@ -1264,7 +1287,7 @@ export class CoreCourseProvider {
             downloadTime: entry.status == CoreConstants.DOWNLOADING ? entry.previousDownloadTime : entry.downloadTime,
         };
 
-        await db.updateRecords(COURSE_STATUS_TABLE, newData, { id: courseId });
+        await this.statusTables[site.getId()].update(newData, { id: courseId });
         // Success updating, trigger event.
         this.triggerCourseStatusChanged(courseId, newData.status, siteId);
 
@@ -1311,16 +1334,14 @@ export class CoreCourseProvider {
 
         if (previousStatus != status) {
             // Status has changed, update it.
-            const data: CoreCourseStatusDBRecord = {
+            await this.statusTables[site.getId()].insert({
                 id: courseId,
                 status: status,
                 previous: previousStatus,
                 updated: new Date().getTime(),
                 downloadTime: downloadTime,
                 previousDownloadTime: previousDownloadTime,
-            };
-
-            await site.getDb().insertRecord(COURSE_STATUS_TABLE, data);
+            });
         }
 
         // Success inserting, trigger event.

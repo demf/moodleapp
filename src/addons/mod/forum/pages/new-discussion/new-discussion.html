@@ -34,8 +34,8 @@
             <ion-item button class="divider ion-text-wrap" (click)="toggleAdvanced()" detail="false" [attr.aria-expanded]="advanced"
                 [attr.aria-label]="(advanced ? 'core.hideadvanced' : 'core.showadvanced') | translate" role="heading"
                 aria-controls="addon-mod-forum-new-discussion-advanced">
-                <ion-icon *ngIf="!advanced" name="fas-caret-right" flip-rtl slot="start" aria-hidden="true"></ion-icon>
-                <ion-icon *ngIf="advanced" name="fas-caret-down" slot="start" aria-hidden="true"></ion-icon>
+                <ion-icon name="fas-chevron-right" flip-rtl slot="start" aria-hidden="true" class="expandable-status-icon"
+                    [class.expandable-status-icon-expanded]="advanced"></ion-icon>
                 <ion-label>
                     <h2>{{ 'addon.mod_forum.advanced' | translate }}</h2>
                 </ion-label>
@@ -45,7 +45,7 @@
                     <ion-label>{{ 'addon.mod_forum.posttomygroups' | translate }}</ion-label>
                     <ion-toggle [(ngModel)]="newDiscussion.postToAllGroups" name="postallgroups"></ion-toggle>
                 </ion-item>
-                <ion-item *ngIf="showGroups">
+                <ion-item *ngIf="showGroups" class="core-edit-set-group">
                     <ion-label id="addon-mod-forum-groupslabel">{{ 'addon.mod_forum.group' | translate }}</ion-label>
                     <ion-select [(ngModel)]="newDiscussion.groupId" [disabled]="newDiscussion.postToAllGroups"
                         aria-labelledby="addon-mod-forum-groupslabel" interface="action-sheet" name="groupid"
@@ -69,14 +69,14 @@
             <ion-item>
                 <ion-label>
                     <ion-row>
+                        <ion-col *ngIf="hasOffline">
+                            <ion-button expand="block" fill="outline" (click)="discard()">{{ 'core.discard' | translate }}</ion-button>
+                        </ion-col>
                         <ion-col>
                             <ion-button expand="block" [disabled]="newDiscussion.subject == '' || newDiscussion.message == null"
                                 (click)="add()">
                                 {{ 'addon.mod_forum.posttoforum' | translate }}
                             </ion-button>
-                        </ion-col>
-                        <ion-col *ngIf="hasOffline">
-                            <ion-button expand="block" color="light" (click)="discard()">{{ 'core.discard' | translate }}</ion-button>
                         </ion-col>
                     </ion-row>
                 </ion-label>

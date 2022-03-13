@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { CoreConfig } from '@services/config';
 import { CoreFilepool } from '@services/filepool';
 import { CoreLang } from '@services/lang';
 import { CoreLocalNotifications } from '@services/local-notifications';
+import { CoreSites } from '@services/sites';
 import { CoreUpdateManager } from '@services/update-manager';
 
 export default async function(): Promise<void> {
     await Promise.all([
+        CoreConfig.initialize(),
         CoreFilepool.initialize(),
+        CoreSites.initialize(),
         CoreLang.initialize(),
         CoreLocalNotifications.initialize(),
         CoreUpdateManager.initialize(),

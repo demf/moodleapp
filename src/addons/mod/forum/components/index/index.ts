@@ -89,6 +89,7 @@ export class AddonModForumIndexComponent extends CoreCourseModuleMainActivityCom
         component: AddonModForumSortOrderSelectorComponent,
     };
 
+    protected fetchContentDefaultError = 'addon.mod_forum.errorgetforum';
     protected syncEventName = AddonModForumSyncProvider.AUTO_SYNCED;
     protected syncManualObserver?: CoreEventObserver; // It will observe the sync manual event.
     protected replyObserver?: CoreEventObserver;
@@ -173,7 +174,7 @@ export class AddonModForumIndexComponent extends CoreCourseModuleMainActivityCom
                 // Check if there are replies for discussions stored in offline.
                 const hasOffline = await AddonModForumOffline.hasForumReplies(this.forum.id);
 
-                this.hasOffline = this.hasOffline || hasOffline;
+                this.hasOffline = this.hasOffline || hasOffline || this.hasOfflineRatings;
 
                 if (hasOffline) {
                     // Only update new fetched discussions.
@@ -257,6 +258,7 @@ export class AddonModForumIndexComponent extends CoreCourseModuleMainActivityCom
             if (this.forum && data.component == 'mod_forum' && data.ratingArea == 'post' &&
                     data.contextLevel == ContextLevel.MODULE && data.instanceId == this.forum.cmid) {
                 this.hasOfflineRatings = true;
+                this.hasOffline = true;
             }
         });
 
@@ -265,6 +267,7 @@ export class AddonModForumIndexComponent extends CoreCourseModuleMainActivityCom
                     data.contextLevel == ContextLevel.MODULE && data.instanceId == this.forum.cmid) {
                 this.hasOfflineRatings =
                     await CoreRatingOffline.hasRatings('mod_forum', 'post', ContextLevel.MODULE, this.forum.cmid);
+                this.hasOffline = this.hasOffline || this.hasOfflineRatings;
             }
         });
     }
@@ -295,13 +298,9 @@ export class AddonModForumIndexComponent extends CoreCourseModuleMainActivityCom
     }
 
     /**
-     * Download the component contents.
-     *
-     * @param refresh Whether we're refreshing data.
-     * @param sync If the refresh needs syncing.
-     * @param showErrors Wether to show errors to the user or hide them.
+     * @inheritdoc
      */
-    protected async fetchContent(refresh: boolean = false, sync: boolean = false, showErrors: boolean = false): Promise<void> {
+    protected async fetchContent(refresh = false, sync = false, showErrors = false): Promise<void> {
         this.fetchFailed = false;
 
         try {
@@ -325,17 +324,10 @@ export class AddonModForumIndexComponent extends CoreCourseModuleMainActivityCom
                 }),
             ]);
         } catch (error) {
-            if (refresh) {
-                CoreDomUtils.showErrorModalDefault(error, 'addon.mod_forum.errorgetforum', true);
+            this.fetchFailed = true; // Set to prevent infinite calls with infinite-loading.
 
-                this.fetchFailed = true; // Set to prevent infinite calls with infinite-loading.
-            } else {
-                // Get forum failed, retry without using cache since it might be a new activity.
-                await this.refreshContent(sync);
-            }
+            throw error; // Pass the error to the parent catch.
         }
-
-        this.fillContextMenu(refresh);
     }
 
     private async fetchForum(sync: boolean = false, showErrors: boolean = false): Promise<void> {

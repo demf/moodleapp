@@ -14,7 +14,7 @@
 
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CoreCourse } from '@features/course/services/course';
-import { CoreCourseModuleData, CoreCourseModuleCompletionData } from '@features/course/services/course-helper';
+import { CoreCourseModuleCompletionData, CoreCourseModuleData } from '@features/course/services/course-helper';
 import { CoreCourseModuleDelegate } from '@features/course/services/module-delegate';
 import { CoreSites } from '@services/sites';
 
@@ -36,7 +36,6 @@ import { CoreSites } from '@services/sites';
 export class CoreCourseModuleInfoComponent implements OnInit {
 
     @Input() module!: CoreCourseModuleData; // The module to render.
-    @Input() showManualCompletion = true; // Whether to show manual completion, true by default.
     @Input() courseId!: number; // The courseId the module belongs to.
 
     @Input() component!: string; // Component for format text directive.
@@ -45,8 +44,11 @@ export class CoreCourseModuleInfoComponent implements OnInit {
     @Input() description?: string | false; // The description to display. If false, no description will be shown.
     @Input() expandDescription = false; // If the description should be expanded by default.
 
+    @Input() showAvailabilityInfo = false; // If show availability info on the box.
+
     @Input() hasDataToSync = false; // If the activity has any data to be synced.
 
+    @Input() showManualCompletion = true; // Whether to show manual completion, true by default.
     @Output() completionChanged = new EventEmitter<CoreCourseModuleCompletionData>(); // Notify when completion changes.
 
     modicon = '';
@@ -60,7 +62,6 @@ export class CoreCourseModuleInfoComponent implements OnInit {
         this.modicon = await CoreCourseModuleDelegate.getModuleIconSrc(this.module.modname, this.module.modicon, this.module);
 
         this.moduleNameTranslated = CoreCourse.translateModuleName(this.module.modname || '');
-
         this.showCompletion = CoreSites.getRequiredCurrentSite().isVersionGreaterEqualThan('3.11');
     }
 

@@ -67,6 +67,7 @@ export class CoreTextUtilsProvider {
         { old: /files_sitefiles/g, new: 'AddonPrivateFilesSiteFiles' },
         { old: /files_upload/g, new: 'AddonPrivateFilesUpload' },
         { old: /_mmaModAssign/g, new: '_AddonModAssign' },
+        { old: /_mmaModBigbluebuttonbn/g, new: '_AddonModBBB' },
         { old: /_mmaModBook/g, new: '_AddonModBook' },
         { old: /_mmaModChat/g, new: '_AddonModChat' },
         { old: /_mmaModChoice/g, new: '_AddonModChoice' },
@@ -89,6 +90,7 @@ export class CoreTextUtilsProvider {
         { old: /_mmaModWiki/g, new: '_AddonModWiki' },
         { old: /_mmaModWorkshop/g, new: '_AddonModWorkshop' },
         { old: /remoteAddOn_/g, new: 'sitePlugin_' },
+        { old: /AddonNotes:addNote/g, new: 'AddonNotes:notes' },
     ];
 
     protected template: HTMLTemplateElement = document.createElement('template'); // A template element to convert HTML to element.
@@ -279,7 +281,7 @@ export class CoreTextUtilsProvider {
         const firstCharRight = rightPath.charAt(0);
 
         if (lastCharLeft === '/' && firstCharRight === '/') {
-            return leftPath + rightPath.substr(1);
+            return leftPath + rightPath.substring(1);
         } else if (lastCharLeft !== '/' && firstCharRight !== '/') {
             return leftPath + '/' + rightPath;
         } else {
@@ -529,6 +531,18 @@ export class CoreTextUtilsProvider {
     }
 
     /**
+     * Given some HTML code, return the HTML code inside <body> tags. If there are no body tags, return the whole HTML.
+     *
+     * @param html HTML text.
+     * @return Body HTML.
+     */
+    getHTMLBodyContent(html: string): string {
+        const matches = html.match(/<body>([\s\S]*)<\/body>/im);
+
+        return matches?.[1] ?? html;
+    }
+
+    /**
      * Get the pluginfile URL to replace @@PLUGINFILE@@ wildcards.
      *
      * @param files Files to extract the URL from. They need to have the URL in a 'url' or 'fileurl' attribute.
@@ -539,7 +553,7 @@ export class CoreTextUtilsProvider {
             const url = CoreFileHelper.getFileUrl(files[0]);
 
             // Remove text after last slash (encoded or not).
-            return url?.substr(0, Math.max(url.lastIndexOf('/'), url.lastIndexOf('%2F')));
+            return url?.substring(0, Math.max(url.lastIndexOf('/'), url.lastIndexOf('%2F')));
         }
 
         return undefined;
@@ -778,9 +792,9 @@ export class CoreTextUtilsProvider {
             }
 
             // Get the filename from the URL.
-            let filename = url.substr(url.lastIndexOf('/') + 1);
+            let filename = url.substring(url.lastIndexOf('/') + 1);
             if (filename.indexOf('?') != -1) {
-                filename = filename.substr(0, filename.indexOf('?'));
+                filename = filename.substring(0, filename.indexOf('?'));
             }
 
             if (pluginfileMap[filename]) {
@@ -904,12 +918,12 @@ export class CoreTextUtilsProvider {
      */
     shortenText(text: string, length: number): string {
         if (text.length > length) {
-            text = text.substr(0, length);
+            text = text.substring(0, length);
 
             // Now, truncate at the last word boundary (if exists).
             const lastWordPos = text.lastIndexOf(' ');
             if (lastWordPos > 0) {
-                text = text.substr(0, lastWordPos);
+                text = text.substring(0, lastWordPos);
             }
             text += '&hellip;';
         }

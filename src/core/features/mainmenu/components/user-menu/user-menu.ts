@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { CoreConstants } from '@/core/constants';
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CoreSiteInfo } from '@classes/site';
+import { CoreSite, CoreSiteInfo } from '@classes/site';
+import { CoreFilter } from '@features/filter/services/filter';
 import { CoreLoginSitesComponent } from '@features/login/components/sites/sites';
 import { CoreLoginHelper } from '@features/login/services/login-helper';
 import { CoreUser, CoreUserProfile } from '@features/user/services/user';
-import { CoreUserProfileHandlerData, CoreUserDelegate, CoreUserDelegateService } from '@features/user/services/user-delegate';
+import {
+    CoreUserProfileHandlerData,
+    CoreUserDelegate,
+    CoreUserDelegateService,
+    CoreUserDelegateContext,
+} from '@features/user/services/user-delegate';
 import { CoreNavigator } from '@services/navigator';
 import { CoreSites } from '@services/sites';
 import { CoreDomUtils } from '@services/utils/dom';
@@ -34,14 +41,17 @@ import { Subscription } from 'rxjs';
 })
 export class CoreMainMenuUserMenuComponent implements OnInit, OnDestroy {
 
+    siteId?: string;
     siteInfo?: CoreSiteInfo;
     siteName?: string;
+    siteLogo?: string;
+    siteLogoLoaded = false;
     siteUrl?: string;
     handlers: CoreUserProfileHandlerData[] = [];
     handlersLoaded = false;
-    loaded = false;
     user?: CoreUserProfile;
-    moreSites = false;
+    displaySwitchAccount = true;
+    removeAccountOnLogout = false;
 
     protected subscription!: Subscription;
 
@@ -49,36 +59,61 @@ export class CoreMainMenuUserMenuComponent implements OnInit, OnDestroy {
      * @inheritdoc
      */
     async ngOnInit(): Promise<void> {
-        // Check if there are more sites to switch.
-        const sites = await CoreSites.getSites();
-        this.moreSites = sites.length > 1;
-
         const currentSite = CoreSites.getRequiredCurrentSite();
+        this.siteId = currentSite.getId();
         this.siteInfo = currentSite.getInfo();
         this.siteName = currentSite.getSiteName();
         this.siteUrl = currentSite.getURL();
+        this.displaySwitchAccount = !currentSite.isFeatureDisabled('NoDelegate_SwitchAccount');
+        this.removeAccountOnLogout = !!CoreConstants.CONFIG.removeaccountonlogout;
 
-        this.loaded = true;
+        this.loadSiteLogo(currentSite);
 
         // Load the handlers.
         if (this.siteInfo) {
             this.user = await CoreUser.getProfile(this.siteInfo.userid);
 
-            this.subscription = CoreUserDelegate.getProfileHandlersFor(this.user).subscribe((handlers) => {
-                if (!handlers || !this.user) {
-                    return;
-                }
-
-                this.handlers = [];
-                handlers.forEach((handler) => {
-                    if (handler.type == CoreUserDelegateService.TYPE_NEW_PAGE) {
-                        this.handlers.push(handler.data);
+            this.subscription = CoreUserDelegate.getProfileHandlersFor(this.user, CoreUserDelegateContext.USER_MENU)
+                .subscribe((handlers) => {
+                    if (!handlers || !this.user) {
+                        return;
                     }
+
+                    this.handlers = [];
+                    handlers.forEach((handler) => {
+                        if (handler.type == CoreUserDelegateService.TYPE_NEW_PAGE) {
+                            this.handlers.push(handler.data);
+                        }
+                    });
+
+                    this.handlersLoaded = CoreUserDelegate.areHandlersLoaded(this.user.id, CoreUserDelegateContext.USER_MENU);
                 });
 
-                this.handlersLoaded = CoreUserDelegate.areHandlersLoaded(this.user.id);
-            });
+        }
+    }
 
+    /**
+     * Load site logo from current site public config.
+     *
+     * @param currentSite Current site object.
+     * @return Promise resolved when done.
+     */
+    protected async loadSiteLogo(currentSite: CoreSite): Promise<void> {
+        if (CoreConstants.CONFIG.forceLoginLogo) {
+            this.siteLogo = 'assets/img/login_logo.png';
+            this.siteLogoLoaded = true;
+
+            return;
+        }
+
+        try {
+            const siteConfig = await currentSite.getPublicConfig();
+
+            this.siteLogo = CoreLoginHelper.getLogoUrl(siteConfig);
+        } catch {
+            // Ignore errors.
+        } finally {
+            this.siteLogoLoaded = true;
         }
     }
 
@@ -125,7 +160,7 @@ export class CoreMainMenuUserMenuComponent implements OnInit, OnDestroy {
 
         await this.close(event);
 
-        handler.action(event, this.user);
+        handler.action(event, this.user, CoreUserDelegateContext.USER_MENU);
     }
 
     /**
@@ -134,9 +169,26 @@ export class CoreMainMenuUserMenuComponent implements OnInit, OnDestroy {
      * @param event Click event
      */
     async logout(event: Event): Promise<void> {
+        if (this.removeAccountOnLogout) {
+            // Ask confirm.
+            const siteName = this.siteName ?
+                await CoreFilter.formatText(this.siteName, { clean: true, singleLine: true, filter: false }, [], this.siteId) :
+                '';
+
+            try {
+                await CoreDomUtils.showDeleteConfirm('core.login.confirmdeletesite', { sitename: siteName });
+            } catch (error) {
+                // User cancelled, stop.
+                return;
+            }
+        }
+
         await this.close(event);
 
-        CoreSites.logout();
+        await CoreSites.logout({
+            forceLogout: true,
+            removeAccount: this.removeAccountOnLogout,
+        });
     }
 
     /**
@@ -152,7 +204,7 @@ export class CoreMainMenuUserMenuComponent implements OnInit, OnDestroy {
 
         const closeAll = await CoreDomUtils.openSideModal<boolean>({
             component: CoreLoginSitesComponent,
-            cssClass: 'core-modal-lateral-sm',
+            cssClass: 'core-modal-lateral core-modal-lateral-sm',
         });
 
         if (closeAll) {

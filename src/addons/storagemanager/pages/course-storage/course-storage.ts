@@ -24,7 +24,7 @@ import {
 import {
     CoreCourseModulePrefetchDelegate,
     CoreCourseModulePrefetchHandler } from '@features/course/services/module-prefetch-delegate';
-import { CoreCourses, CoreEnrolledCourseData } from '@features/courses/services/courses';
+import { CoreCourses } from '@features/courses/services/courses';
 import { CoreNavigator } from '@services/navigator';
 import { CoreSites } from '@services/sites';
 import { CoreDomUtils } from '@services/utils/dom';
@@ -43,7 +43,6 @@ import { CoreEventObserver, CoreEvents } from '@singletons/events';
 })
 export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
 
-    course?: CoreEnrolledCourseData;
     courseId!: number;
     title = '';
     loaded = false;
@@ -60,6 +59,8 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
         loading: true,
     };
 
+    statusDownloaded = CoreConstants.DOWNLOADED;
+
     protected siteUpdatedObserver?: CoreEventObserver;
     protected courseStatusObserver?: CoreEventObserver;
     protected sectionStatusObserver?: CoreEventObserver;
@@ -70,7 +71,7 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
     constructor() {
         // Refresh the enabled flags if site is updated.
         this.siteUpdatedObserver = CoreEvents.on(CoreEvents.SITE_UPDATED, () => {
-            this.downloadCourseEnabled = !!this.course && !CoreCourses.isDownloadCourseDisabledInSite();
+            this.downloadCourseEnabled = !CoreCourses.isDownloadCourseDisabledInSite();
             this.downloadEnabled = !CoreSites.getRequiredCurrentSite().isOfflineDisabled();
 
             this.initCoursePrefetch();
@@ -92,15 +93,14 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
             return;
         }
 
-        this.course = CoreNavigator.getRouteParam<CoreEnrolledCourseData>('course');
-        this.title = this.course?.displayname ?? this.course?.fullname ?? '';
+        this.title = CoreNavigator.getRouteParam<string>('title') || '';
         if (!this.title && this.courseId == CoreSites.getCurrentSiteHomeId()) {
             this.title = Translate.instant('core.sitehome.sitehome');
         }
 
         this.isGuest = !!CoreNavigator.getRouteBooleanParam('isGuest');
 
-        this.downloadCourseEnabled = !!this.course && !CoreCourses.isDownloadCourseDisabledInSite();
+        this.downloadCourseEnabled = !CoreCourses.isDownloadCourseDisabledInSite();
         this.downloadEnabled = !CoreSites.getRequiredCurrentSite().isOfflineDisabled();
 
         const sections = await CoreCourse.getSections(this.courseId, false, true);
@@ -284,7 +284,10 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
      */
     async deleteForCourse(): Promise<void> {
         try {
-            await CoreDomUtils.showDeleteConfirm('core.course.confirmdeletestoreddata');
+            await CoreDomUtils.showDeleteConfirm(
+                'addon.storagemanager.confirmdeletedatafrom',
+                { name: this.title },
+            );
         } catch (error) {
             if (!CoreDomUtils.isCanceledError(error)) {
                 throw error;
@@ -314,7 +317,10 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
      */
     async deleteForSection(section: AddonStorageManagerCourseSection): Promise<void> {
         try {
-            await CoreDomUtils.showDeleteConfirm('core.course.confirmdeletestoreddata');
+            await CoreDomUtils.showDeleteConfirm(
+                'addon.storagemanager.confirmdeletedatafrom',
+                { name: section.name },
+            );
         } catch (error) {
             if (!CoreDomUtils.isCanceledError(error)) {
                 throw error;
@@ -345,7 +351,10 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
         }
 
         try {
-            await CoreDomUtils.showDeleteConfirm('core.course.confirmdeletestoreddata');
+            await CoreDomUtils.showDeleteConfirm(
+                'addon.storagemanager.confirmdeletedatafrom',
+                { name: module.name },
+            );
         } catch (error) {
             if (!CoreDomUtils.isCanceledError(error)) {
                 throw error;
@@ -365,7 +374,7 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
      * @return Promise<void> Once deleting has finished
      */
     protected async deleteModules(modules: AddonStorageManagerModule[], section?: AddonStorageManagerCourseSection): Promise<void> {
-        const modal = await CoreDomUtils.showModalLoading();
+        const modal = await CoreDomUtils.showModalLoading('core.deleting', true);
 
         const promises: Promise<void>[] = [];
         modules.forEach((module) => {
@@ -551,14 +560,19 @@ export class AddonStorageManagerCourseStoragePage implements OnInit, OnDestroy {
      * Prefetch the whole course.
      */
     async prefetchCourse(): Promise<void> {
-        if (!this.course) {
+        const courses = await CoreCourses.getUserCourses(true);
+        let course = courses.find((course) => course.id == this.courseId);
+        if (!course) {
+            course = await CoreCourses.getCourse(this.courseId);
+        }
+        if (!course) {
             return;
         }
 
         try {
             await CoreCourseHelper.confirmAndPrefetchCourse(
                 this.prefetchCourseData,
-                this.course,
+                course,
                 {
                     sections: this.sections,
                     isGuest: this.isGuest,

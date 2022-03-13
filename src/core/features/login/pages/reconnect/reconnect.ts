@@ -23,7 +23,7 @@ import { CoreLoginHelper } from '@features/login/services/login-helper';
 import { CoreSite, CoreSiteIdentityProvider, CoreSitePublicConfigResponse } from '@classes/site';
 import { CoreEvents } from '@singletons/events';
 import { CoreError } from '@classes/errors/error';
-import { CoreNavigationOptions, CoreNavigator } from '@services/navigator';
+import { CoreNavigator, CoreRedirectPayload } from '@services/navigator';
 import { CoreForms } from '@singletons/form';
 
 /**
@@ -53,11 +53,11 @@ export class CoreLoginReconnectPage implements OnInit, OnDestroy {
     siteId!: string;
     showScanQR = false;
 
-    protected page?: string;
-    protected pageOptions?: CoreNavigationOptions;
     protected siteConfig?: CoreSitePublicConfigResponse;
     protected viewLeft = false;
     protected eventThrown = false;
+    protected redirectData?: CoreRedirectPayload;
+    protected loginSuccessful = false;
 
     constructor(
         protected fb: FormBuilder,
@@ -77,8 +77,15 @@ export class CoreLoginReconnectPage implements OnInit, OnDestroy {
         try {
             this.siteId = CoreNavigator.getRequiredRouteParam<string>('siteId');
 
-            this.page = CoreNavigator.getRouteParam('pageName');
-            this.pageOptions = CoreNavigator.getRouteParam('pageOptions');
+            const redirectPath = CoreNavigator.getRouteParam('redirectPath');
+            const urlToOpen = CoreNavigator.getRouteParam('urlToOpen');
+            if (redirectPath || urlToOpen) {
+                this.redirectData = {
+                    redirectPath,
+                    redirectOptions: CoreNavigator.getRouteParam('redirectOptions'),
+                    urlToOpen,
+                };
+            }
 
             const site = await CoreSites.getSite(this.siteId);
 
@@ -111,7 +118,14 @@ export class CoreLoginReconnectPage implements OnInit, OnDestroy {
      */
     ngOnDestroy(): void {
         this.viewLeft = true;
-        CoreEvents.trigger(CoreEvents.LOGIN_SITE_UNCHECKED, { config: this.siteConfig }, this.siteId);
+        CoreEvents.trigger(
+            CoreEvents.LOGIN_SITE_UNCHECKED,
+            {
+                config: this.siteConfig,
+                loginSuccessful: this.loginSuccessful,
+            },
+            this.siteId,
+        );
     }
 
     /**
@@ -208,9 +222,11 @@ export class CoreLoginReconnectPage implements OnInit, OnDestroy {
             this.credForm.controls['password'].reset();
 
             // Go to the site initial page.
-            this.page
-                ? await CoreNavigator.navigateToSitePath(this.page, this.pageOptions)
-                : await CoreNavigator.navigateToSiteHome();
+            this.loginSuccessful = true;
+
+            await CoreNavigator.navigateToSiteHome({
+                params: this.redirectData,
+            });
         } catch (error) {
             CoreLoginHelper.treatUserTokenError(this.siteUrl, error, this.username, password);
 
@@ -242,8 +258,7 @@ export class CoreLoginReconnectPage implements OnInit, OnDestroy {
             this.siteUrl,
             provider,
             this.siteConfig?.launchurl,
-            this.page,
-            this.pageOptions,
+            this.redirectData,
         );
 
         if (!result) {

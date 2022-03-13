@@ -16,7 +16,7 @@
         <ion-refresher-content pullingText="{{ 'core.pulltorefresh' | translate }}"></ion-refresher-content>
     </ion-refresher>
 
-    <core-loading [hideUntil]="loaded">
+    <core-loading [hideUntil]="loaded" class="list-item-limited-width">
         <ng-container *ngIf="entry && loaded">
             <ion-item class="ion-text-wrap" *ngIf="showAuthor">
                 <core-user-avatar [user]="entry" slot="start"></core-user-avatar>
@@ -46,7 +46,7 @@
                     </core-format-text>
                 </ion-label>
             </ion-item>
-            <div *ngIf="entry.attachment" lines="none">
+            <div *ngIf="entry.attachment">
                 <core-file *ngFor="let file of entry.attachments" [file]="file" [component]="component" [componentId]="componentId">
                 </core-file>
             </div>

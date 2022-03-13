@@ -29,6 +29,7 @@ import {
     AddonNotificationsHelper,
     AddonNotificationsNotificationToRender,
 } from '@addons/notifications/services/notifications-helper';
+import { CoreMainMenuDeepLinkManager } from '@features/mainmenu/classes/deep-link-manager';
 
 /**
  * Page that displays the list of notifications.
@@ -53,7 +54,7 @@ export class AddonNotificationsListPage implements OnInit, OnDestroy {
     protected pendingRefresh = false;
 
     /**
-     * Component being initialized.
+     * @inheritdoc
      */
     ngOnInit(): void {
         this.fetchNotifications();
@@ -82,6 +83,9 @@ export class AddonNotificationsListPage implements OnInit, OnDestroy {
             this.notificationsLoaded = false;
             this.refreshNotifications();
         });
+
+        const deepLinkManager = new CoreMainMenuDeepLinkManager();
+        deepLinkManager.treatLink();
     }
 
     /**
@@ -221,7 +225,7 @@ export class AddonNotificationsListPage implements OnInit, OnDestroy {
     }
 
     /**
-     * Page destroyed.
+     * @inheritdoc
      */
     ngOnDestroy(): void {
         this.cronObserver?.off();

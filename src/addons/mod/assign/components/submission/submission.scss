@@ -15,16 +15,21 @@
     }
 
     div.submissioneditable p {
-        color: var(--red);
+        color: var(--danger);
     }
 
     .core-grading-summary .advancedgrade {
         display: none;
     }
+
+    ion-badge {
+        margin-left: 2px;
+        margin-right: 2px;
+    }
 }
 
 :host-context(body.dark) ::ng-deep {
     div.submissioneditable p {
-        color: var(--red-light);
+        color: var(--danger-tint);
     }
 }

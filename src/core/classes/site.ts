@@ -41,6 +41,12 @@ import { CoreLogger } from '@singletons/logger';
 import { Translate } from '@singletons';
 import { CoreIonLoadingElement } from './ion-loading';
 import { CoreLang } from '@services/lang';
+import { CoreSites } from '@services/sites';
+import { asyncInstance, AsyncInstance } from '../utils/async-instance';
+import { CoreDatabaseTable } from './database/database-table';
+import { CoreDatabaseCachingStrategy } from './database/database-table-proxy';
+import { CoreSilentError } from './errors/silenterror';
+import { CoreWindow } from '@singletons/window';
 
 /**
  * QR Code type enumeration.
@@ -77,6 +83,7 @@ export class CoreSite {
     // Variables for the database.
     static readonly WS_CACHE_TABLE = 'wscache_2';
     static readonly CONFIG_TABLE = 'core_site_config';
+    static readonly LAST_VIEWED_TABLE = 'core_site_last_viewed';
 
     static readonly MINIMUM_MOODLE_VERSION = '3.5';
 
@@ -103,6 +110,9 @@ export class CoreSite {
     // Rest of variables.
     protected logger: CoreLogger;
     protected db?: SQLiteDB;
+    protected cacheTable: AsyncInstance<CoreDatabaseTable<CoreSiteWSCacheRecord>>;
+    protected configTable: AsyncInstance<CoreDatabaseTable<CoreSiteConfigDBRecord, 'name'>>;
+    protected lastViewedTable: AsyncInstance<CoreDatabaseTable<CoreSiteLastViewedDBRecord, 'component' | 'id'>>;
     protected cleanUnicode = false;
     protected lastAutoLogin = 0;
     protected offlineDisabled = false;
@@ -136,6 +146,23 @@ export class CoreSite {
     ) {
         this.logger = CoreLogger.getInstance('CoreSite');
         this.siteUrl = CoreUrlUtils.removeUrlParams(this.siteUrl); // Make sure the URL doesn't have params.
+        this.cacheTable = asyncInstance(() => CoreSites.getSiteTable(CoreSite.WS_CACHE_TABLE, {
+            siteId: this.getId(),
+            database: this.getDb(),
+            config: { cachingStrategy: CoreDatabaseCachingStrategy.None },
+        }));
+        this.configTable = asyncInstance(() => CoreSites.getSiteTable(CoreSite.CONFIG_TABLE, {
+            siteId: this.getId(),
+            database: this.getDb(),
+            config: { cachingStrategy: CoreDatabaseCachingStrategy.Eager },
+            primaryKeyColumns: ['name'],
+        }));
+        this.lastViewedTable = asyncInstance(() => CoreSites.getSiteTable(CoreSite.LAST_VIEWED_TABLE, {
+            siteId: this.getId(),
+            database: this.getDb(),
+            config: { cachingStrategy: CoreDatabaseCachingStrategy.None },
+            primaryKeyColumns: ['component', 'id'],
+        }));
         this.setInfo(infos);
         this.calculateOfflineDisabled();
 
@@ -503,7 +530,8 @@ export class CoreSite {
             // Site is logged out, it cannot call WebServices.
             CoreEvents.trigger(CoreEvents.SESSION_EXPIRED, {}, this.id);
 
-            throw new CoreError(Translate.instant('core.lostconnection'));
+            // Use a silent error, the SESSION_EXPIRED event will display a message if needed.
+            throw new CoreSilentError(Translate.instant('core.lostconnection'));
         }
 
         const initialToken = this.token || '';
@@ -576,9 +604,13 @@ export class CoreSite {
 
             // Call the WS.
             try {
-                // Send the language to use. Do it after checking cache to prevent losing offline data when changing language.
-                data.moodlewssettinglang = preSets.lang ?? await CoreLang.getCurrentLanguage();
-                data.moodlewssettinglang = data.moodlewssettinglang.replace('-', '_'); // Moodle uses underscore instead of dash.
+                if (method !== 'core_webservice_get_site_info') {
+                    // Send the language to use. Do it after checking cache to prevent losing offline data when changing language.
+                    // Don't send it to core_webservice_get_site_info, that WS is used to check if Moodle version is supported.
+                    data.moodlewssettinglang = preSets.lang ?? await CoreLang.getCurrentLanguage();
+                    // Moodle uses underscore instead of dash.
+                    data.moodlewssettinglang = data.moodlewssettinglang.replace('-', '_');
+                }
 
                 const response = await this.callOrEnqueueRequest<T>(method, data, preSets, wsPreSets);
 
@@ -589,6 +621,8 @@ export class CoreSite {
 
                 return response;
             } catch (error) {
+                let useSilentError = false;
+
                 if (CoreUtils.isExpiredTokenError(error)) {
                     if (initialToken !== this.token && !retrying) {
                         // Token has changed, retry with the new token.
@@ -606,10 +640,23 @@ export class CoreSite {
                     CoreEvents.trigger(CoreEvents.SESSION_EXPIRED, {}, this.id);
                     // Change error message. Try to get data from cache, the event will handle the error.
                     error.message = Translate.instant('core.lostconnection');
-                } else if (error.errorcode === 'userdeleted') {
+                    useSilentError = true; // Use a silent error, the SESSION_EXPIRED event will display a message if needed.
+                } else if (error.errorcode === 'userdeleted' || error.errorcode === 'wsaccessuserdeleted') {
                     // User deleted, trigger event.
                     CoreEvents.trigger(CoreEvents.USER_DELETED, { params: data }, this.id);
                     error.message = Translate.instant('core.userdeleted');
+
+                    throw new CoreWSError(error);
+                } else if (error.errorcode === 'wsaccessusersuspended') {
+                    // User suspended, trigger event.
+                    CoreEvents.trigger(CoreEvents.USER_SUSPENDED, { params: data }, this.id);
+                    error.message = Translate.instant('core.usersuspended');
+
+                    throw new CoreWSError(error);
+                } else if (error.errorcode === 'wsaccessusernologin') {
+                    // User suspended, trigger event.
+                    CoreEvents.trigger(CoreEvents.USER_NO_LOGIN, { params: data }, this.id);
+                    error.message = Translate.instant('core.usernologin');
 
                     throw new CoreWSError(error);
                 } else if (error.errorcode === 'forcepasswordchangenotice') {
@@ -674,7 +721,11 @@ export class CoreSite {
 
                 try {
                     return await this.getFromCache<T>(method, data, preSets, true);
-                } catch (e) {
+                } catch {
+                    if (useSilentError) {
+                        throw new CoreSilentError(error.message);
+                    }
+
                     throw new CoreWSError(error);
                 }
             }
@@ -910,8 +961,7 @@ export class CoreSite {
         preSets: CoreSiteWSPreSets,
         emergency?: boolean,
     ): Promise<T> {
-        const db = this.db;
-        if (!db || !preSets.getFromCache) {
+        if (!this.db || !preSets.getFromCache) {
             throw new CoreError('Get from cache is disabled.');
         }
 
@@ -919,11 +969,11 @@ export class CoreSite {
         let entry: CoreSiteWSCacheRecord | undefined;
 
         if (preSets.getCacheUsingCacheKey || (emergency && preSets.getEmergencyCacheUsingCacheKey)) {
-            const entries = await db.getRecords<CoreSiteWSCacheRecord>(CoreSite.WS_CACHE_TABLE, { key: preSets.cacheKey });
+            const entries = await this.cacheTable.getMany({ key: preSets.cacheKey });
 
             if (!entries.length) {
                 // Cache key not found, get by params sent.
-                entry = await db.getRecord(CoreSite.WS_CACHE_TABLE, { id });
+                entry = await this.cacheTable.getOneByPrimaryKey({ id });
             } else {
                 if (entries.length > 1) {
                     // More than one entry found. Search the one with same ID as this call.
@@ -935,7 +985,7 @@ export class CoreSite {
                 }
             }
         } else {
-            entry = await db.getRecord(CoreSite.WS_CACHE_TABLE, { id });
+            entry = await this.cacheTable.getOneByPrimaryKey({ id });
         }
 
         if (entry === undefined) {
@@ -986,12 +1036,18 @@ export class CoreSite {
             extraClause = ' AND componentId = ?';
         }
 
-        const size = <number> await this.getDb().getFieldSql(
-            'SELECT SUM(length(data)) FROM ' + CoreSite.WS_CACHE_TABLE + ' WHERE component = ?' + extraClause,
-            params,
+        return this.cacheTable.reduce(
+            {
+                sql: 'SUM(length(data))',
+                js: (size, record) => size + record.data.length,
+                jsInitialValue: 0,
+            },
+            {
+                sql: 'WHERE component = ?' + extraClause,
+                sqlParams: params,
+                js: record => record.component === component && (params.length === 1 || record.componentId === componentId),
+            },
         );
-
-        return size;
     }
 
     /**
@@ -1005,10 +1061,6 @@ export class CoreSite {
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     protected async saveToCache(method: string, data: any, response: any, preSets: CoreSiteWSPreSets): Promise<void> {
-        if (!this.db) {
-            throw new CoreError('Site DB not initialized.');
-        }
-
         if (preSets.uniqueCacheKey) {
             // Cache key must be unique, delete all entries with same cache key.
             await CoreUtils.ignoreErrors(this.deleteFromCache(method, data, preSets, true));
@@ -1034,7 +1086,7 @@ export class CoreSite {
             }
         }
 
-        await this.db.insertRecord(CoreSite.WS_CACHE_TABLE, entry);
+        await this.cacheTable.insert(entry);
     }
 
     /**
@@ -1048,16 +1100,12 @@ export class CoreSite {
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     protected async deleteFromCache(method: string, data: any, preSets: CoreSiteWSPreSets, allCacheKey?: boolean): Promise<void> {
-        if (!this.db) {
-            throw new CoreError('Site DB not initialized.');
-        }
-
         const id = this.getCacheId(method, data);
 
         if (allCacheKey) {
-            await this.db.deleteRecords(CoreSite.WS_CACHE_TABLE, { key: preSets.cacheKey });
+            await this.cacheTable.delete({ key: preSets.cacheKey });
         } else {
-            await this.db.deleteRecords(CoreSite.WS_CACHE_TABLE, { id });
+            await this.cacheTable.deleteByPrimaryKey({ id });
         }
     }
 
@@ -1074,18 +1122,13 @@ export class CoreSite {
             return;
         }
 
-        if (!this.db) {
-            throw new CoreError('Site DB not initialized');
-        }
+        const params = { component };
 
-        const params = {
-            component,
-        };
         if (componentId) {
             params['componentId'] = componentId;
         }
 
-        await this.db.deleteRecords(CoreSite.WS_CACHE_TABLE, params);
+        await this.cacheTable.delete(params);
     }
 
     /*
@@ -1117,14 +1160,10 @@ export class CoreSite {
      * @return Promise resolved when the cache entries are invalidated.
      */
     async invalidateWsCache(): Promise<void> {
-        if (!this.db) {
-            throw new CoreError('Site DB not initialized');
-        }
-
         this.logger.debug('Invalidate all the cache for site: ' + this.id);
 
         try {
-            await this.db.updateRecords(CoreSite.WS_CACHE_TABLE, { expirationTime: 0 });
+            await this.cacheTable.update({ expirationTime: 0 });
         } finally {
             CoreEvents.trigger(CoreEvents.WS_CACHE_INVALIDATED, {}, this.getId());
         }
@@ -1137,16 +1176,13 @@ export class CoreSite {
      * @return Promise resolved when the cache entries are invalidated.
      */
     async invalidateWsCacheForKey(key: string): Promise<void> {
-        if (!this.db) {
-            throw new CoreError('Site DB not initialized');
-        }
         if (!key) {
             return;
         }
 
         this.logger.debug('Invalidate cache for key: ' + key);
 
-        await this.db.updateRecords(CoreSite.WS_CACHE_TABLE, { expirationTime: 0 }, { key });
+        await this.cacheTable.update({ expirationTime: 0 }, { key });
     }
 
     /**
@@ -1174,18 +1210,17 @@ export class CoreSite {
      * @return Promise resolved when the cache entries are invalidated.
      */
     async invalidateWsCacheForKeyStartingWith(key: string): Promise<void> {
-        if (!this.db) {
-            throw new CoreError('Site DB not initialized');
-        }
         if (!key) {
             return;
         }
 
         this.logger.debug('Invalidate cache for key starting with: ' + key);
 
-        const sql = 'UPDATE ' + CoreSite.WS_CACHE_TABLE + ' SET expirationTime=0 WHERE key LIKE ?';
-
-        await this.db.execute(sql, [key + '%']);
+        await this.cacheTable.updateWhere({ expirationTime: 0 }, {
+            sql: 'key LIKE ?',
+            sqlParams: [key + '%'],
+            js: record => !!record.key?.startsWith(key),
+        });
     }
 
     /**
@@ -1260,9 +1295,11 @@ export class CoreSite {
      * @return Promise resolved with the total size of all data in the cache table (bytes)
      */
     async getCacheUsage(): Promise<number> {
-        const size = <number> await this.getDb().getFieldSql('SELECT SUM(length(data)) FROM ' + CoreSite.WS_CACHE_TABLE);
-
-        return size;
+        return this.cacheTable.reduce({
+            sql: 'SUM(length(data))',
+            js: (size, record) => size + record.data.length,
+            jsInitialValue: 0,
+        });
     }
 
     /**
@@ -1473,7 +1510,7 @@ export class CoreSite {
         alertMessage?: string,
     ): Promise<InAppBrowserObject | void> {
         // Get the URL to open.
-        url = await this.getAutoLoginUrl(url);
+        const autoLoginUrl = await this.getAutoLoginUrl(url);
 
         if (alertMessage) {
             // Show an alert first.
@@ -1490,9 +1527,20 @@ export class CoreSite {
 
         // Open the URL.
         if (inApp) {
-            return CoreUtils.openInApp(url, options);
+            return CoreUtils.openInApp(autoLoginUrl, options);
         } else {
-            return CoreUtils.openInBrowser(url, options);
+            if ((options.showBrowserWarning || options.showBrowserWarning === undefined) && autoLoginUrl !== url) {
+                // Don't display the autologin URL in the warning.
+                try {
+                    await CoreWindow.confirmOpenBrowserIfNeeded(url);
+
+                    options.showBrowserWarning = false;
+                } catch (error) {
+                    return; // Cancelled, stop.
+                }
+            }
+
+            return CoreUtils.openInBrowser(autoLoginUrl, options);
         }
     }
 
@@ -1813,7 +1861,7 @@ export class CoreSite {
      * @return Promise resolved when done.
      */
     async deleteSiteConfig(name: string): Promise<void> {
-        await this.getDb().deleteRecords(CoreSite.CONFIG_TABLE, { name });
+        await this.configTable.deleteByPrimaryKey({ name });
     }
 
     /**
@@ -1825,7 +1873,7 @@ export class CoreSite {
      */
     async getLocalSiteConfig<T extends number | string>(name: string, defaultValue?: T): Promise<T> {
         try {
-            const entry = await this.getDb().getRecord<CoreSiteConfigDBRecord>(CoreSite.CONFIG_TABLE, { name });
+            const entry = await this.configTable.getOneByPrimaryKey({ name });
 
             return <T> entry.value;
         } catch (error) {
@@ -1845,7 +1893,7 @@ export class CoreSite {
      * @return Promise resolved when done.
      */
     async setLocalSiteConfig(name: string, value: number | string): Promise<void> {
-        await this.getDb().insertRecord(CoreSite.CONFIG_TABLE, { name, value });
+        await this.configTable.insert({ name, value });
     }
 
     /**
@@ -1925,6 +1973,49 @@ export class CoreSite {
         }
 
         return this.containsUrl(url);
+    }
+
+    /**
+     * Deletes last viewed records based on some conditions.
+     *
+     * @param conditions Conditions.
+     * @return Promise resolved when done.
+     */
+    async deleteLastViewed(conditions?: Partial<CoreSiteLastViewedDBRecord>): Promise<void> {
+        await this.lastViewedTable.delete(conditions);
+    }
+
+    /**
+     * Get a last viewed record for a component+id.
+     *
+     * @param component The component.
+     * @param id ID.
+     * @return Resolves with last viewed record, undefined if not found.
+     */
+    async getLastViewed(component: string, id: number): Promise<CoreSiteLastViewedDBRecord | undefined> {
+        try {
+            return await this.lastViewedTable.getOneByPrimaryKey({ component, id });
+        } catch (error) {
+            // Not found.
+        }
+    }
+
+    /**
+     * Store a last viewed record.
+     *
+     * @param component The component.
+     * @param id ID.
+     * @param value Last viewed item value.
+     * @param data Other data.
+     * @return Promise resolved when done.
+     */
+    async storeLastViewed(component: string, id: number, value: string | number, data?: string): Promise<void> {
+        await this.lastViewedTable.insert({
+            component,
+            id,
+            value: String(value),
+            data,
+        });
     }
 
 }
@@ -2252,4 +2343,11 @@ export type CoreSiteWSCacheRecord = {
     key?: string;
     component?: string;
     componentId?: number;
+};
+
+export type CoreSiteLastViewedDBRecord = {
+    component: string;
+    id: number;
+    value: string;
+    data?: string;
 };

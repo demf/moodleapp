@@ -27,6 +27,16 @@ export const enum ContextLevel {
     BLOCK = 'block',
 }
 
+export const enum ModPurpose {
+    MOD_PURPOSE_COMMUNICATION = 'communication',
+    MOD_PURPOSE_ASSESSMENT = 'assessment',
+    MOD_PURPOSE_COLLABORATION = 'collaboration',
+    MOD_PURPOSE_CONTENT = 'content',
+    MOD_PURPOSE_ADMINISTRATION = 'administration',
+    MOD_PURPOSE_INTERFACE = 'interface',
+    MOD_PURPOSE_OTHER = 'other',
+};
+
 /**
  * Static class to contain all the core constants.
  */
@@ -83,10 +93,10 @@ export class CoreConstants {
     static readonly NOT_DOWNLOADABLE = 'notdownloadable';
 
     // Download / prefetch status icon.
-    static readonly ICON_DOWNLOADED = 'cloud-done';
+    static readonly ICON_DOWNLOADED = 'fam-cloud-done';
     static readonly ICON_DOWNLOADING = 'spinner';
-    static readonly ICON_NOT_DOWNLOADED = 'cloud-download';
-    static readonly ICON_OUTDATED = 'fas-redo-alt';
+    static readonly ICON_NOT_DOWNLOADED = 'fas-cloud-download-alt';
+    static readonly ICON_OUTDATED = 'fam-cloud-refresh';
     static readonly ICON_NOT_DOWNLOADABLE = '';
 
     // General download and sync icons.
@@ -119,6 +129,7 @@ export class CoreConstants {
     static readonly FEATURE_MOD_INTRO = 'mod_intro'; // True if module supports intro editor.
     static readonly FEATURE_MODEDIT_DEFAULT_COMPLETION = 'modedit_default_completion'; // True if module has default completion.
     static readonly FEATURE_COMMENT = 'comment';
+    static readonly FEATURE_MOD_PURPOSE = 'mod_purpose'; // Type of module.
     static readonly FEATURE_RATE = 'rate';
     static readonly FEATURE_BACKUP_MOODLE2 = 'backup_moodle2'; // True if module supports backup/restore of moodle2 format.
     static readonly FEATURE_SHOW_DESCRIPTION = 'showdescription'; // True if module can show description on course main page.
@@ -131,8 +142,19 @@ export class CoreConstants {
     static readonly MOD_ARCHETYPE_SYSTEM = 3; // System (not user-addable) module archetype.
 
     // Config & environment constants.
-    static readonly CONFIG = envJson.config as unknown as EnvironmentConfig; // Data parsed from config.json files.
+    static readonly CONFIG = { ...envJson.config } as unknown as EnvironmentConfig; // Data parsed from config.json files.
     static readonly BUILD = envJson.build as unknown as EnvironmentBuild; // Build info.
+
+    /**
+     * Check whether devtools should be enabled.
+     *
+     * @returns Whether devtools should be enabled.
+     */
+    static enableDevTools(): boolean {
+        // @todo [4.0] This is not the proper way to check for development tools, we should rely only on the BUILD variable.
+        return this.BUILD.isDevelopment
+            || this.CONFIG.versionname.includes('-dev');
+    }
 
 }
 

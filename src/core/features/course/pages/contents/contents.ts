@@ -29,12 +29,8 @@ import {
 } from '@features/course/services/course-helper';
 import { CoreCourseFormatDelegate } from '@features/course/services/format-delegate';
 import { CoreCourseModulePrefetchDelegate } from '@features/course/services/module-prefetch-delegate';
-import {
-    CoreCourseOptionsDelegate,
-    CoreCourseOptionsMenuHandlerToDisplay,
-} from '@features/course/services/course-options-delegate';
 import { CoreCourseSync, CoreCourseSyncProvider } from '@features/course/services/sync';
-import { CoreCourseFormatComponent } from '../../components/format/format';
+import { CoreCourseFormatComponent } from '../../components/course-format/course-format';
 import {
     CoreEvents,
     CoreEventObserver,
@@ -57,7 +53,6 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
     sections?: CoreCourseSection[];
     sectionId?: number;
     sectionNumber?: number;
-    courseMenuHandlers: CoreCourseOptionsMenuHandlerToDisplay[] = [];
     dataLoaded = false;
     downloadCourseEnabled = false;
     moduleId?: number;
@@ -66,10 +61,10 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
 
     protected formatOptions?: Record<string, unknown>;
     protected completionObserver?: CoreEventObserver;
+    protected manualCompletionObserver?: CoreEventObserver;
     protected syncObserver?: CoreEventObserver;
     protected isDestroyed = false;
     protected modulesHaveCompletion = false;
-    protected isGuest = false;
     protected debouncedUpdateCachedCompletion?: () => void; // Update the cached completion after a certain time.
 
     /**
@@ -89,7 +84,6 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
         this.sectionId = CoreNavigator.getRouteNumberParam('sectionId');
         this.sectionNumber = CoreNavigator.getRouteNumberParam('sectionNumber');
         this.moduleId = CoreNavigator.getRouteNumberParam('moduleId');
-        this.isGuest = !!CoreNavigator.getRouteBooleanParam('isGuest');
 
         this.debouncedUpdateCachedCompletion = CoreUtils.debounce(() => {
             if (this.modulesHaveCompletion) {
@@ -119,36 +113,40 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
      * @return Promise resolved when done.
      */
     protected async initListeners(): Promise<void> {
+        if (this.completionObserver) {
+            return; // Already initialized.
+        }
+
         // Check if the course format requires the view to be refreshed when completion changes.
         const shouldRefresh = await CoreCourseFormatDelegate.shouldRefreshWhenCompletionChanges(this.course);
         if (!shouldRefresh) {
             return;
         }
 
-        if (!this.completionObserver) {
-            this.completionObserver = CoreEvents.on(
-                CoreEvents.COMPLETION_MODULE_VIEWED,
-                (data) => {
-                    if (data && data.courseId == this.course.id) {
-                        this.refreshAfterCompletionChange(true);
-                    }
-                },
-            );
-        }
-
-        if (!this.syncObserver) {
-            this.syncObserver = CoreEvents.on(CoreCourseSyncProvider.AUTO_SYNCED, (data) => {
-                if (!data || data.courseId != this.course.id) {
-                    return;
+        this.completionObserver = CoreEvents.on(
+            CoreEvents.COMPLETION_MODULE_VIEWED,
+            (data) => {
+                if (data && data.courseId == this.course.id) {
+                    this.refreshAfterCompletionChange(true);
                 }
+            },
+        );
 
-                this.refreshAfterCompletionChange(false);
+        this.manualCompletionObserver = CoreEvents.on(CoreEvents.MANUAL_COMPLETION_CHANGED, (data) => {
+            this.onCompletionChange(data.completion);
+        });
 
-                if (data.warnings && data.warnings[0]) {
-                    CoreDomUtils.showErrorModal(data.warnings[0]);
-                }
-            });
-        }
+        this.syncObserver = CoreEvents.on(CoreCourseSyncProvider.AUTO_SYNCED, (data) => {
+            if (!data || data.courseId != this.course.id) {
+                return;
+            }
+
+            this.refreshAfterCompletionChange(false);
+
+            if (data.warnings && data.warnings[0]) {
+                CoreDomUtils.showErrorModal(data.warnings[0]);
+            }
+        });
     }
 
     /**
@@ -184,7 +182,6 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
         try {
             await Promise.all([
                 this.loadSections(refresh),
-                this.loadMenuHandlers(refresh),
                 this.loadCourseFormatOptions(),
             ]);
         } catch (error) {
@@ -246,16 +243,6 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
 
         // Get whether to show the refresher now that we have sections.
         this.displayRefresher = CoreCourseFormatDelegate.displayRefresher(this.course, this.sections);
-    }
-
-    /**
-     * Load the course menu handlers.
-     *
-     * @param refresh If it's refreshing content.
-     * @return Promise resolved when done.
-     */
-    protected async loadMenuHandlers(refresh?: boolean): Promise<void> {
-        this.courseMenuHandlers = await CoreCourseOptionsDelegate.getMenuHandlersToDisplay(this.course, refresh, this.isGuest);
     }
 
     /**
@@ -379,32 +366,21 @@ export class CoreCourseContentsPage implements OnInit, OnDestroy {
         }
     }
 
-    /**
-     * Open the course summary
-     */
-    openCourseSummary(): void {
+    gotoCourseDownloads(): void {
         CoreNavigator.navigateToSitePath(
-            '/course/' + this.course.id + '/preview',
-            { params: { course: this.course, avoidOpenCourse: true } },
+            `storage/${this.course.id}`,
+            { params: { title: this.course.fullname } },
         );
+
     }
 
     /**
-     * Opens a menu item registered to the delegate.
-     *
-     * @param item Item to open
-     */
-    openMenuItem(item: CoreCourseOptionsMenuHandlerToDisplay): void {
-        const params = Object.assign({ course: this.course }, item.data.pageParams);
-        CoreNavigator.navigateToSitePath(item.data.page, { params });
-    }
-
-    /**
-     * Page destroyed.
+     * @inheritdoc
      */
     ngOnDestroy(): void {
         this.isDestroyed = true;
         this.completionObserver?.off();
+        this.manualCompletionObserver?.off();
         this.syncObserver?.off();
     }
 

@@ -64,47 +64,29 @@ import { CoreFile } from '@services/file';
 import { CoreUrlUtils } from '@services/utils/url';
 import { CoreTextUtils } from '@services/utils/text';
 import { CoreTimeUtils } from '@services/utils/time';
-import { CoreEventObserver, CoreEvents } from '@singletons/events';
 import { CoreFilterHelper } from '@features/filter/services/filter-helper';
 import { CoreNetworkError } from '@classes/errors/network-error';
 import { CoreSiteHome } from '@features/sitehome/services/sitehome';
-import { CoreNavigator } from '@services/navigator';
+import { CoreNavigationOptions, CoreNavigator } from '@services/navigator';
 import { CoreSiteHomeHomeHandlerService } from '@features/sitehome/services/handlers/sitehome-home';
 import { CoreStatusWithWarningsWSResponse } from '@services/ws';
 
 /**
  * Prefetch info of a module.
  */
-export type CoreCourseModulePrefetchInfo = {
-    /**
-     * Downloaded size.
-     */
-    size: number;
+export type CoreCourseModulePrefetchInfo = CoreCourseModulePackageLastDownloaded & {
+    size: number; // Downloaded size.
+    sizeReadable: string; // Downloadable size in a readable format.
+    status: string; // Module status.
+    statusIcon?: string; // Icon's name of the module status.
+};
 
-    /**
-     * Downloadable size in a readable format.
-     */
-    sizeReadable: string;
-
-    /**
-     * Module status.
-     */
-    status: string;
-
-    /**
-     * Icon's name of the module status.
-     */
-    statusIcon?: string;
-
-    /**
-     * Time when the module was last downloaded.
-     */
-    downloadTime: number;
-
-    /**
-     * Download time in a readable format.
-     */
-    downloadTimeReadable: string;
+/**
+ * Prefetch info of a module.
+ */
+export type CoreCourseModulePackageLastDownloaded = {
+    downloadTime: number; // Time when the module was last downloaded.
+    downloadTimeReadable: string; // Download time in a readable format.
 };
 
 /**
@@ -491,22 +473,18 @@ export class CoreCourseHelperProvider {
      *
      * @param module Module to remove the files.
      * @param courseId Course ID the module belongs to.
-     * @param done Function to call when done. It will close the context menu.
      * @return Promise resolved when done.
+     * @deprecated since 4.0
      */
-    async confirmAndRemoveFiles(module: CoreCourseModuleData, courseId: number, done?: () => void): Promise<void> {
+    async confirmAndRemoveFiles(module: CoreCourseModuleData, courseId: number): Promise<void> {
         let modal: CoreIonLoadingElement | undefined;
 
         try {
-
-            await CoreDomUtils.showDeleteConfirm('core.course.confirmdeletestoreddata');
+            await CoreDomUtils.showDeleteConfirm('addon.storagemanager.confirmdeletedatafrom', { name: module.name });
 
             modal = await CoreDomUtils.showModalLoading();
 
             await this.removeModuleStoredData(module, courseId);
-
-            done && done();
-
         } catch (error) {
             if (error) {
                 CoreDomUtils.showErrorModal(error);
@@ -569,44 +547,6 @@ export class CoreCourseHelperProvider {
 
         // Show confirm modal if needed.
         await CoreDomUtils.confirmDownloadSize(sizeSum, undefined, undefined, undefined, undefined, alwaysConfirm);
-    }
-
-    /**
-     * Helper function to prefetch a module, showing a confirmation modal if the size is big.
-     * This function is meant to be called from a context menu option. It will also modify some data like the prefetch icon.
-     *
-     * @param instance The component instance that has the context menu.
-     * @param module Module to be prefetched
-     * @param courseId Course ID the module belongs to.
-     * @param done Function to call when done. It will close the context menu.
-     * @return Promise resolved when done.
-     */
-    async contextMenuPrefetch(
-        instance: ComponentWithContextMenu,
-        module: CoreCourseModuleData,
-        courseId: number,
-        done?: () => void,
-    ): Promise<void> {
-        const initialIcon = instance.prefetchStatusIcon;
-        instance.prefetchStatusIcon = CoreConstants.ICON_DOWNLOADING; // Show spinner since this operation might take a while.
-
-        try {
-            // We need to call getDownloadSize, the package might have been updated.
-            const size = await CoreCourseModulePrefetchDelegate.getModuleDownloadSize(module, courseId, true);
-
-            await CoreDomUtils.confirmDownloadSize(size);
-
-            await CoreCourseModulePrefetchDelegate.prefetchModule(module, courseId, true);
-
-            // Success, close menu.
-            done && done();
-        } catch (error) {
-            instance.prefetchStatusIcon = initialIcon;
-
-            if (!instance.isDestroyed) {
-                CoreDomUtils.showErrorModalDefault(error, 'core.errordownloading', true);
-            }
-        }
     }
 
     /**
@@ -905,17 +845,30 @@ export class CoreCourseHelperProvider {
         }
 
         if (!path) {
-            path = await this.downloadModuleWithMainFile(
-                module,
-                courseId,
-                fixedUrl,
-                files,
-                status,
-                component,
-                componentId,
-                siteId,
-                options,
-            );
+            try {
+                path = await this.downloadModuleWithMainFile(
+                    module,
+                    courseId,
+                    fixedUrl,
+                    files,
+                    status,
+                    component,
+                    componentId,
+                    siteId,
+                    options,
+                );
+            } catch (error) {
+                if (status !== CoreConstants.OUTDATED) {
+                    throw error;
+                }
+
+                // Use the local file even if it's outdated.
+                try {
+                    path = await CoreFilepool.getInternalUrlByUrl(siteId, mainFile.fileurl);
+                } catch {
+                    throw error;
+                }
+            }
         }
 
         return {
@@ -1033,86 +986,6 @@ export class CoreCourseHelperProvider {
     }
 
     /**
-     * Fill the Context Menu for a certain module.
-     *
-     * @param instance The component instance that has the context menu.
-     * @param module Module to be prefetched
-     * @param courseId Course ID the module belongs to.
-     * @param invalidateCache Invalidates the cache first.
-     * @param component Component of the module.
-     * @return Promise resolved when done.
-     */
-    async fillContextMenu(
-        instance: ComponentWithContextMenu,
-        module: CoreCourseModuleData,
-        courseId: number,
-        invalidateCache?: boolean,
-        component?: string,
-    ): Promise<void> {
-        const siteId = CoreSites.getCurrentSiteId();
-
-        const moduleInfo = await this.getModulePrefetchInfo(module, courseId, invalidateCache, component);
-
-        instance.size = moduleInfo.sizeReadable;
-        instance.prefetchStatusIcon = moduleInfo.statusIcon;
-        instance.prefetchStatus = moduleInfo.status;
-
-        if (moduleInfo.status != CoreConstants.NOT_DOWNLOADABLE) {
-            // Module is downloadable, get the text to display to prefetch.
-            if (moduleInfo.downloadTime && moduleInfo.downloadTime > 0) {
-                instance.prefetchText = Translate.instant('core.lastdownloaded') + ': ' + moduleInfo.downloadTimeReadable;
-            } else {
-                // Module not downloaded, show a default text.
-                instance.prefetchText = Translate.instant('core.download');
-            }
-        }
-
-        if (moduleInfo.status == CoreConstants.DOWNLOADING) {
-            // Set this to empty to prevent "remove file" option showing up while downloading.
-            instance.size = '';
-        }
-
-        if (!instance.contextMenuStatusObserver && component) {
-            instance.contextMenuStatusObserver = CoreEvents.on(
-                CoreEvents.PACKAGE_STATUS_CHANGED,
-                (data) => {
-                    if (data.componentId == module.id && data.component == component) {
-                        this.fillContextMenu(instance, module, courseId, false, component);
-                    }
-                },
-                siteId,
-            );
-        }
-
-        if (!instance.contextFileStatusObserver && component) {
-            // Debounce the update size function to prevent too many calls when downloading or deleting a whole activity.
-            const debouncedUpdateSize = CoreUtils.debounce(async () => {
-                const moduleSize = await CoreCourseModulePrefetchDelegate.getModuleStoredSize(module, courseId);
-
-                instance.size = moduleSize > 0 ? CoreTextUtils.bytesToSize(moduleSize, 2) : '';
-            }, 1000);
-
-            instance.contextFileStatusObserver = CoreEvents.on(
-                CoreEvents.COMPONENT_FILE_ACTION,
-                (data) => {
-                    if (data.component != component || data.componentId != module.id) {
-                        // The event doesn't belong to this component, ignore.
-                        return;
-                    }
-
-                    if (!CoreFilepool.isFileEventDownloadedOrDeleted(data)) {
-                        return;
-                    }
-
-                    // Update the module size.
-                    debouncedUpdateSize();
-                },
-                siteId,
-            );
-        }
-    }
-
-    /**
      * Get a course. It will first check the user courses, and fallback to another WS if not enrolled.
      *
      * @param courseId Course ID.
@@ -1164,7 +1037,7 @@ export class CoreCourseHelperProvider {
 
         modal?.dismiss();
 
-        return this.openCourse(course, params, siteId);
+        return this.openCourse(course, { params , siteId });
     }
 
     /**
@@ -1468,22 +1341,21 @@ export class CoreCourseHelperProvider {
     async getModulePrefetchInfo(
         module: CoreCourseModuleData,
         courseId: number,
-        invalidateCache?: boolean,
-        component?: string,
+        invalidateCache = false,
+        component = '',
     ): Promise<CoreCourseModulePrefetchInfo> {
-
-        const siteId = CoreSites.getCurrentSiteId();
-
         if (invalidateCache) {
             // Currently, some modules pass invalidateCache=false because they already invalidate data in downloadResourceIfNeeded.
             // If this function is changed to do more actions if invalidateCache=true, please review those modules.
             CoreCourseModulePrefetchDelegate.invalidateModuleStatusCache(module);
+
+            await CoreUtils.ignoreErrors(CoreCourseModulePrefetchDelegate.invalidateCourseUpdates(courseId));
         }
 
         const results = await Promise.all([
             CoreCourseModulePrefetchDelegate.getModuleStoredSize(module, courseId),
             CoreCourseModulePrefetchDelegate.getModuleStatus(module, courseId),
-            CoreUtils.ignoreErrors(CoreFilepool.getPackageData(siteId, component || '', module.id)),
+            this.getModulePackageLastDownloaded(module, component),
         ]);
 
         // Treat stored size.
@@ -1510,33 +1382,51 @@ export class CoreCourseHelperProvider {
                 break;
         }
 
-        // Treat download time.
-        if (!results[2] || !results[2].downloadTime || !CoreFileHelper.isStateDownloaded(results[2].status || '')) {
-            // Not downloaded.
-            return {
-                size,
-                sizeReadable,
-                status,
-                statusIcon,
-                downloadTime: 0,
-                downloadTimeReadable: '',
-            };
-        }
-
-        const now = CoreTimeUtils.timestamp();
-        const downloadTime = results[2].downloadTime;
-        let downloadTimeReadable = '';
-        if (now - results[2].downloadTime < 7 * 86400) {
-            downloadTimeReadable = moment(results[2].downloadTime * 1000).fromNow();
-        } else {
-            downloadTimeReadable = moment(results[2].downloadTime * 1000).calendar();
-        }
+        const packageData = results[2];
 
         return {
             size,
             sizeReadable,
             status,
             statusIcon,
+            downloadTime: packageData.downloadTime,
+            downloadTimeReadable: packageData.downloadTimeReadable,
+        };
+    }
+
+    /**
+     * Get prefetch info for a module.
+     *
+     * @param module Module to get the info from.
+     * @param component Component of the module.
+     * @return Promise resolved with the info.
+     */
+    async getModulePackageLastDownloaded(
+        module: CoreCourseModuleData,
+        component = '',
+    ): Promise<CoreCourseModulePackageLastDownloaded> {
+        const siteId = CoreSites.getCurrentSiteId();
+        const packageData = await CoreUtils.ignoreErrors(CoreFilepool.getPackageData(siteId, component, module.id));
+
+        // Treat download time.
+        if (!packageData || !packageData.downloadTime || !CoreFileHelper.isStateDownloaded(packageData.status || '')) {
+            // Not downloaded.
+            return {
+                downloadTime: 0,
+                downloadTimeReadable: '',
+            };
+        }
+
+        const now = CoreTimeUtils.timestamp();
+        const downloadTime = packageData.downloadTime;
+        let downloadTimeReadable = '';
+        if (now - downloadTime < 7 * 86400) {
+            downloadTimeReadable = moment(downloadTime * 1000).fromNow();
+        } else {
+            downloadTimeReadable = moment(downloadTime * 1000).calendar();
+        }
+
+        return {
             downloadTime,
             downloadTimeReadable,
         };
@@ -1557,36 +1447,27 @@ export class CoreCourseHelperProvider {
      *
      * @param instanceId Activity instance ID.
      * @param modName Module name of the activity.
-     * @param siteId Site ID. If not defined, current site.
-     * @param courseId Course ID. If not defined we'll try to retrieve it from the site.
-     * @param sectionId Section the module belongs to. If not defined we'll try to retrieve it from the site.
-     * @param useModNameToGetModule If true, the app will retrieve all modules of this type with a single WS call. This reduces the
-     *                              number of WS calls, but it isn't recommended for modules that can return a lot of contents.
-     * @param modParams Params to pass to the module
+     * @param options Other options.
      * @return Promise resolved when done.
      */
     async navigateToModuleByInstance(
         instanceId: number,
         modName: string,
-        siteId?: string,
-        courseId?: number,
-        sectionId?: number,
-        useModNameToGetModule: boolean = false,
-        modParams?: Params,
+        options: CoreCourseNavigateToModuleByInstanceOptions = {},
     ): Promise<void> {
 
         const modal = await CoreDomUtils.showModalLoading();
 
         try {
-            const module = await CoreCourse.getModuleBasicInfoByInstance(instanceId, modName, { siteId });
+            const module = await CoreCourse.getModuleBasicInfoByInstance(instanceId, modName, { siteId: options.siteId });
 
             this.navigateToModule(
                 module.id,
-                siteId,
-                module.course,
-                sectionId,
-                useModNameToGetModule ? modName : undefined,
-                modParams,
+                {
+                    ...options,
+                    courseId: module.course,
+                    modName: options.useModNameToGetModule ? modName : undefined,
+                },
             );
         } catch (error) {
             CoreDomUtils.showErrorModalDefault(error, 'core.course.errorgetmodule', true);
@@ -1600,23 +1481,16 @@ export class CoreCourseHelperProvider {
      * Navigate to a module.
      *
      * @param moduleId Module's ID.
-     * @param siteId Site ID. If not defined, current site.
-     * @param courseId Course ID. If not defined we'll try to retrieve it from the site.
-     * @param sectionId Section the module belongs to. If not defined we'll try to retrieve it from the site.
-     * @param modName If set, the app will retrieve all modules of this type with a single WS call. This reduces the
-     *                number of WS calls, but it isn't recommended for modules that can return a lot of contents.
-     * @param modParams Params to pass to the module
+     * @param options Other options.
      * @return Promise resolved when done.
      */
     async navigateToModule(
         moduleId: number,
-        siteId?: string,
-        courseId?: number,
-        sectionId?: number,
-        modName?: string,
-        modParams?: Params,
+        options: CoreCourseNavigateToModuleOptions = {},
     ): Promise<void> {
-        siteId = siteId || CoreSites.getCurrentSiteId();
+        const siteId = options.siteId || CoreSites.getCurrentSiteId();
+        let courseId = options.courseId;
+        let sectionId = options.sectionId;
 
         const modal = await CoreDomUtils.showModalLoading();
 
@@ -1635,10 +1509,9 @@ export class CoreCourseHelperProvider {
             const site = await CoreSites.getSite(siteId);
 
             // Get the module.
-            const module =
-                await CoreCourse.getModule(moduleId, courseId, sectionId, false, false, siteId, modName);
+            const module = await CoreCourse.getModule(moduleId, courseId, sectionId, false, false, siteId, options.modName);
 
-            if (CoreSites.getCurrentSiteId() == site.getId()) {
+            if (CoreSites.getCurrentSiteId() === site.getId()) {
                 // Try to use the module's handler to navigate cleanly.
                 module.handlerData = await CoreCourseModuleDelegate.getModuleDataFor(
                     module.modname,
@@ -1651,7 +1524,7 @@ export class CoreCourseHelperProvider {
                 if (module.handlerData?.action) {
                     modal.dismiss();
 
-                    return module.handlerData.action(new Event('click'), module, courseId, { params: modParams });
+                    return module.handlerData.action(new Event('click'), module, courseId, options.modNavOptions);
                 }
             }
 
@@ -1659,7 +1532,7 @@ export class CoreCourseHelperProvider {
                 course: { id: courseId },
                 module,
                 sectionId,
-                modParams,
+                modNavOptions: options.modNavOptions,
             };
 
             if (courseId == site.getSiteHomeId()) {
@@ -1688,23 +1561,25 @@ export class CoreCourseHelperProvider {
      *
      * @param module The module to open.
      * @param courseId The course ID of the module.
-     * @param sectionId The section ID of the module.
-     * @param modParams Params to pass to the module
+     * @param options Other options.
      * @param True if module can be opened, false otherwise.
      */
-    async openModule(module: CoreCourseModuleData, courseId: number, sectionId?: number, modParams?: Params): Promise<boolean> {
+    async openModule(module: CoreCourseModuleData, courseId: number, options: CoreCourseOpenModuleOptions = {}): Promise<boolean> {
         if (!module.handlerData) {
             module.handlerData = await CoreCourseModuleDelegate.getModuleDataFor(
                 module.modname,
                 module,
                 courseId,
-                sectionId,
+                options.sectionId,
                 false,
             );
         }
 
         if (module.handlerData?.action) {
-            module.handlerData.action(new Event('click'), module, courseId, { animated: false, params: modParams });
+            module.handlerData.action(new Event('click'), module, courseId, {
+                animated: false,
+                ...options.modNavOptions,
+            });
 
             return true;
         }
@@ -2004,20 +1879,25 @@ export class CoreCourseHelperProvider {
      * they will see the result immediately.
      *
      * @param course Course to open
-     * @param params Params to pass to the course page.
-     * @param siteId Site ID. If not defined, current site.
+     * @param navOptions Navigation options that includes params to pass to the page.
      * @return Promise resolved when done.
      */
-    async openCourse(course: CoreCourseAnyCourseData | { id: number }, params?: Params, siteId?: string): Promise<void> {
+    async openCourse(
+        course: CoreCourseAnyCourseData | { id: number },
+        navOptions?: CoreNavigationOptions & { siteId?: string },
+    ): Promise<void> {
+        const siteId = navOptions?.siteId;
         if (!siteId || siteId == CoreSites.getCurrentSiteId()) {
             // Current site, we can open the course.
-            return CoreCourse.openCourse(course, params);
+            return CoreCourse.openCourse(course, navOptions);
         } else {
             // We need to load the site first.
-            params = params || {};
-            Object.assign(params, { course: course });
+            navOptions = navOptions || {};
 
-            await CoreNavigator.navigateToSitePath(`course/${course.id}`, { siteId, params });
+            navOptions.params = navOptions.params || {};
+            Object.assign(navOptions.params, { course: course });
+
+            await CoreNavigator.navigateToSitePath(`course/${course.id}`, navOptions);
         }
     }
 
@@ -2185,12 +2065,35 @@ export type CoreCourseConfirmPrefetchCoursesOptions = CoreCoursePrefetchCoursesO
     onProgress?: (data: CoreCourseCoursesProgress) => void;
 };
 
-type ComponentWithContextMenu = {
-    prefetchStatusIcon?: string;
-    isDestroyed?: boolean;
-    size?: string;
-    prefetchStatus?: string;
-    prefetchText?: string;
-    contextMenuStatusObserver?: CoreEventObserver;
-    contextFileStatusObserver?: CoreEventObserver;
+/**
+ * Common options for navigate to module functions.
+ */
+type CoreCourseNavigateToModuleCommonOptions = {
+    courseId?: number; // Course ID. If not defined we'll try to retrieve it from the site.
+    sectionId?: number; // Section the module belongs to. If not defined we'll try to retrieve it from the site.
+    modNavOptions?: CoreNavigationOptions; // Navigation options to open the module, including params to pass to the module.
+    siteId?: string; // Site ID. If not defined, current site.
+};
+
+/**
+ * Options for navigate to module by instance function.
+ */
+export type CoreCourseNavigateToModuleByInstanceOptions = CoreCourseNavigateToModuleCommonOptions & {
+    // True to retrieve all instances with a single WS call. Not recommended if can return a lot of contents.
+    useModNameToGetModule?: boolean;
+};
+
+/**
+ * Options for navigate to module function.
+ */
+export type CoreCourseNavigateToModuleOptions = CoreCourseNavigateToModuleCommonOptions & {
+    modName?: string; // To retrieve all instances with a single WS call. Not recommended if can return a lot of contents.
+};
+
+/**
+ * Options for open module function.
+ */
+export type CoreCourseOpenModuleOptions = {
+    sectionId?: number; // Section the module belongs to.
+    modNavOptions?: CoreNavigationOptions; // Navigation options to open the module, including params to pass to the module.
 };

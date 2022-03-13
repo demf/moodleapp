@@ -1,5 +1,9 @@
 @import "~theme/globals";
 
+:host {
+    --list-item-max-width: 600px;
+}
+
 .item-input:last-child {
     margin-bottom: 20px;
 }
@@ -25,7 +29,7 @@
     width: 50px;
     height: 50px;
     border-radius: 20%;
-    box-shadow: 0 0 4px #eee;
+    box-shadow: 0 0 4px var(--gray-200);
     text-align: center;
     overflow: hidden;
 
@@ -100,13 +104,7 @@
     }
 }
 
-@media (min-width: 768px) {
-    ion-content > * {
-        max-width: 600px;
-        margin: 0 auto;
-        width: 100%;
-    }
-
+@include media-breakpoint-up(md) {
     ion-content .core-login-site-logo {
         margin-top: 20%;
         &.hidden {
@@ -116,9 +114,10 @@
 }
 
 .core-login-entered-site {
-    background-color: var(--gray-lighter);
+    background-color: var(--light);
+
     ion-thumbnail {
-        box-shadow: 0 0 4px #ddd;
+        box-shadow: 0 0 4px var(--gray-300);
     }
 }
 

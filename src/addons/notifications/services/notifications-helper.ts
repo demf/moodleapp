@@ -41,7 +41,16 @@ export class AddonNotificationsHelperProvider {
         notification: AddonNotificationsNotificationMessageFormatted,
     ): AddonNotificationsNotificationToRender {
         const formattedNotification: AddonNotificationsNotificationToRender = notification;
-        formattedNotification.iconurl = formattedNotification.iconurl || undefined; // Make sure the property exists.
+
+        if (notification.moodlecomponent?.startsWith('mod_') && notification.iconurl) {
+            const modname = notification.moodlecomponent.substring(4);
+            if (notification.iconurl.match('/theme/image.php/[^/]+/' + modname + '/[-0-9]*/') ||
+                    notification.iconurl.match('/theme/image.php/[^/]+/' + notification.moodlecomponent + '/[-0-9]*/')) {
+                formattedNotification.modname = modname;
+            }
+        } else {
+            formattedNotification.iconurl = formattedNotification.iconurl || undefined; // Make sure the property exists.
+        }
 
         return formattedNotification;
     }
@@ -66,34 +75,6 @@ export class AddonNotificationsHelperProvider {
         });
 
         return formattedPreferences;
-    }
-
-    /**
-     * Get a certain processor from a list of processors.
-     *
-     * @param processors List of processors.
-     * @param name Name of the processor to get.
-     * @param fallback True to return first processor if not found, false to not return any. Defaults to true.
-     * @return Processor.
-     */
-    getProcessor(
-        processors: AddonNotificationsPreferencesProcessor[],
-        name: string,
-        fallback: boolean = true,
-    ): AddonNotificationsPreferencesProcessor | undefined {
-        if (!processors || !processors.length) {
-            return;
-        }
-
-        const processor = processors.find((processor) => processor.name == name);
-        if (processor) {
-            return processor;
-        }
-
-        // Processor not found, return first if requested.
-        if (fallback) {
-            return processors[0];
-        }
     }
 
     /**
@@ -157,7 +138,11 @@ export type AddonNotificationsPreferencesComponentFormatted = Omit<AddonNotifica
  * Preferences notification with some calculated data.
  */
 export type AddonNotificationsPreferencesNotificationFormatted = AddonNotificationsPreferencesNotification & {
-    processorsByName?: Record<string, AddonNotificationsPreferencesNotificationProcessor>; // Calculated in the app.
+    processorsByName?: Record<string, AddonNotificationsPreferencesNotificationProcessorFormatted>; // Calculated in the app.
+};
+
+type AddonNotificationsPreferencesNotificationProcessorFormatted = AddonNotificationsPreferencesNotificationProcessor & {
+    updating?: boolean; // Calculated in the app. Whether the state is being updated.
 };
 
 /**
@@ -172,4 +157,5 @@ export type AddonNotificationsPreferencesProcessorFormatted = AddonNotifications
  */
 export type AddonNotificationsNotificationToRender = AddonNotificationsNotificationMessageFormatted & {
     iconurl?: string;
+    modname?: string;
 };

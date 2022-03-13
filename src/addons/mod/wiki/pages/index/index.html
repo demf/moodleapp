@@ -8,10 +8,6 @@
                 <core-format-text [text]="title" contextLevel="module" [contextInstanceId]="module?.id" [courseId]="courseId">
                 </core-format-text>
             </h1>
-            <h2>
-                <core-format-text [text]="pageTitle" contextLevel="module" [contextInstanceId]="module?.id" [courseId]="courseId">
-                </core-format-text>
-            </h2>
         </ion-title>
 
         <ion-buttons slot="end">
@@ -20,7 +16,7 @@
     </ion-toolbar>
 </ion-header>
 <ion-content>
-    <ion-refresher slot="fixed" [disabled]="!activityComponent?.loaded" (ionRefresh)="activityComponent?.doRefresh($event.target)">
+    <ion-refresher slot="fixed" [disabled]="activityComponent?.showLoading" (ionRefresh)="activityComponent?.doRefresh($event.target)">
         <ion-refresher-content pullingText="{{ 'core.pulltorefresh' | translate }}"></ion-refresher-content>
     </ion-refresher>
 

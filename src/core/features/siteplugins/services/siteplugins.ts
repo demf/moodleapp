@@ -871,6 +871,7 @@ export type CoreSitePluginsCourseModuleHandlerData = CoreSitePluginsHandlerCommo
     displayrefresh?: boolean;
     displayprefetch?: boolean;
     displaysize?: boolean;
+    displaygrades?: boolean;
     coursepagemethod?: string;
     ptrenabled?: boolean;
     supportedfeatures?: Record<string, unknown>;
@@ -884,7 +885,11 @@ export type CoreSitePluginsCourseModuleHandlerData = CoreSitePluginsHandlerCommo
 export type CoreSitePluginsCourseFormatHandlerData = CoreSitePluginsHandlerCommonData & {
     canviewallsections?: boolean;
     displayenabledownload?: boolean;
+    /**
+     * @deprecated on 4.0, use displaycourseindex instead.
+     */
     displaysectionselector?: boolean;
+    displaycourseindex?: boolean;
 };
 
 /**

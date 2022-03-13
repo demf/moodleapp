@@ -17,6 +17,8 @@ import { Injectable } from '@angular/core';
 import { SQLiteDB } from '@classes/sqlitedb';
 import { SQLiteDBMock } from '@features/emulator/classes/sqlitedb';
 import { makeSingleton, SQLite, Platform } from '@singletons';
+import { CoreAppProvider } from './app';
+import { CoreUtils } from './utils/utils';
 
 /**
  * This service allows interacting with the local database to store and retrieve data.
@@ -24,7 +26,44 @@ import { makeSingleton, SQLite, Platform } from '@singletons';
 @Injectable({ providedIn: 'root' })
 export class CoreDbProvider {
 
+    queryLogs: CoreDbQueryLog[] = [];
+
     protected dbInstances: {[name: string]: SQLiteDB} = {};
+
+    /**
+     * Check whether database queries should be logged.
+     *
+     * @returns Whether queries should be logged.
+     */
+    loggingEnabled(): boolean {
+        return CoreUtils.hasCookie('MoodleAppDBLoggingEnabled') || CoreAppProvider.isAutomated();
+    }
+
+    /**
+     * Print query history in console.
+     *
+     * @param format Log format, with the following substitutions: :sql, :duration, and :result.
+     */
+    printHistory(format: string = ':sql | Duration: :duration | Result: :result'): void {
+        const substituteParams = ({ sql, params, duration, error }: CoreDbQueryLog) => format
+            .replace(':sql', Object
+                .values(params ?? [])
+                .reduce((sql: string, param: string) => sql.replace('?', param) as string, sql) as string)
+            .replace(':duration', `${Math.round(duration).toString().padStart(4, '0')}ms`)
+            .replace(':result', error?.message ?? 'Success');
+
+        // eslint-disable-next-line no-console
+        console.log(this.queryLogs.map(substituteParams).join('\n'));
+    }
+
+    /**
+     * Log a query.
+     *
+     * @param log Query log.
+     */
+    logQuery(log: CoreDbQueryLog): void {
+        this.queryLogs.push(log);
+    }
 
     /**
      * Get or create a database object.
@@ -81,3 +120,13 @@ export class CoreDbProvider {
 }
 
 export const CoreDB = makeSingleton(CoreDbProvider);
+
+/**
+ * Database query log entry.
+ */
+export interface CoreDbQueryLog {
+    sql: string;
+    duration: number;
+    error?: Error;
+    params?: unknown[];
+}

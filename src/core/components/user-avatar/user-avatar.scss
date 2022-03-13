@@ -1,3 +1,5 @@
+@import '~theme/globals.scss';
+
 :host {
     position: relative;
     width: var(--core-avatar-size);
@@ -44,7 +46,7 @@
         max-height: var(--core-header-toolbar-button-image-size);
         border-radius: 50%;
         display: block;
-        
+
         img {
             padding: 4px;
             border-radius: 50%;
@@ -63,17 +65,6 @@
             background-color: var(--core-online-color);
         }
     }
-
-    .core-avatar-extra-icon {
-        margin: 0 !important;
-        border-radius: 0 !important;
-        background: none;
-        position: absolute;
-        right: -4px;
-        bottom: -4px;
-        width: 24px;
-        height: 24px;
-    }
 }
 
 :host-context(.toolbar) .contact-status {
@@ -87,6 +78,11 @@
 }
 
 :host-context(ion-item) {
-    margin-top: 12px;
-    margin-bottom: 12px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    @include margin(6px, 8px, 6px, 0px);
+    img {
+        min-width: var(--core-avatar-size);
+        min-height: var(--core-avatar-size);
+    }
 }

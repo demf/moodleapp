@@ -17,6 +17,7 @@ import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CoreBlockComponent } from '@features/block/components/block/block';
 import { CoreCourseBlock } from '@features/course/services/course';
 import { CoreCoursesDashboard, CoreCoursesDashboardProvider } from '@features/courses/services/dashboard';
+import { CoreMainMenuDeepLinkManager } from '@features/mainmenu/classes/deep-link-manager';
 import { IonRefresher } from '@ionic/angular';
 import { CoreNavigator } from '@services/navigator';
 import { CoreSites } from '@services/sites';
@@ -36,6 +37,7 @@ export class CoreCoursesMyCoursesPage implements OnInit, OnDestroy {
 
     @ViewChild(CoreBlockComponent) block!: CoreBlockComponent;
 
+    siteName = '';
     searchEnabled = false;
     downloadCoursesEnabled = false;
     userId: number;
@@ -50,6 +52,8 @@ export class CoreCoursesMyCoursesPage implements OnInit, OnDestroy {
         this.updateSiteObserver = CoreEvents.on(CoreEvents.SITE_UPDATED, () => {
             this.searchEnabled = !CoreCourses.isSearchCoursesDisabledInSite();
             this.downloadCoursesEnabled = !CoreCourses.isDownloadCoursesDisabledInSite();
+            this.loadSiteName();
+
         }, CoreSites.getCurrentSiteId());
 
         this.userId = CoreSites.getCurrentSiteUserId();
@@ -62,8 +66,12 @@ export class CoreCoursesMyCoursesPage implements OnInit, OnDestroy {
         this.searchEnabled = !CoreCourses.isSearchCoursesDisabledInSite();
         this.downloadCoursesEnabled = !CoreCourses.isDownloadCoursesDisabledInSite();
 
-        this.loadContent();
+        const deepLinkManager = new CoreMainMenuDeepLinkManager();
+        deepLinkManager.treatLink();
 
+        this.loadSiteName();
+
+        this.loadContent();
     }
 
     /**
@@ -98,6 +106,13 @@ export class CoreCoursesMyCoursesPage implements OnInit, OnDestroy {
     }
 
     /**
+     * Load the site name.
+     */
+    protected loadSiteName(): void {
+        this.siteName = CoreSites.getRequiredCurrentSite().getSiteName() || '';
+    }
+
+    /**
      * Load fallback blocks.
      */
     protected loadFallbackBlock(): void {
@@ -105,13 +120,6 @@ export class CoreCoursesMyCoursesPage implements OnInit, OnDestroy {
             name: 'myoverview',
             visible: true,
         };
-    }
-
-    /**
-     * Open page to manage courses storage.
-     */
-    manageCoursesStorage(): void {
-        CoreNavigator.navigateToSitePath('/storage');
     }
 
     /**

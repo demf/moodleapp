@@ -12,7 +12,7 @@
     <ion-refresher slot="fixed" [disabled]="!userLoaded" (ionRefresh)="refreshUser($event.target)">
         <ion-refresher-content pullingText="{{ 'core.pulltorefresh' | translate }}"></ion-refresher-content>
     </ion-refresher>
-    <core-loading [hideUntil]="userLoaded">
+    <core-loading [hideUntil]="userLoaded" class="list-item-limited-width">
         <ion-list *ngIf="user && !isDeleted && isEnrolled">
             <ion-item class="ion-text-center core-user-profile-maininfo ion-text-wrap">
                 <core-user-avatar [user]="user" [userId]="user.id" [linkProfile]="false" [checkOnline]="true">
@@ -88,6 +88,7 @@
         <core-empty-box *ngIf="!user && !isDeleted && isEnrolled" icon="far-user" [message]=" 'core.user.detailsnotavailable' | translate">
         </core-empty-box>
         <core-empty-box *ngIf="isDeleted" icon="far-user" [message]="'core.userdeleted' | translate"></core-empty-box>
+        <core-empty-box *ngIf="isSuspended" icon="far-user" [message]="'core.usersuspended' | translate"></core-empty-box>
         <core-empty-box *ngIf="!isEnrolled" icon="far-user" [message]="'core.notenrolledprofile' | translate"></core-empty-box>
     </core-loading>
 </ion-content>
