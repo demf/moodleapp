@@ -7,7 +7,7 @@
     "cache_update_frequency_often": 1200000,
     "cache_update_frequency_sometimes": 3600000,
     "cache_update_frequency_rarely": 43200000,
-    "default_lang": "en",
+    "default_lang": "es",
     "languages": {
         "af": "Afrikaans",
         "ar": "عربي",
@@ -82,7 +82,7 @@
         "high": 120
     },
     "customurlscheme": "moodlemobile",
-    "siteurl": "",
+    "siteurl": "https://aula.adipa.cl/",
     "sitename": "",
     "multisitesdisplay": "",
     "sitefindersettings": {},
@@ -94,7 +94,7 @@
     "enableanalytics": false,
     "enableonboarding": true,
     "forceColorScheme": "",
-    "forceLoginLogo": false,
+    "forceLoginLogo": true,
     "ioswebviewscheme": "moodleappfs",
     "appstores": {
         "android": "com.moodle.moodlemobile",

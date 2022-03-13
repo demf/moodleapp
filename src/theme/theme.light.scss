@@ -6,6 +6,7 @@
  */
 
 :root {
+    --ion-color-primary-contrast: #ffffff;
 
     // Color palette
     --black: #{$black};
@@ -44,6 +45,7 @@
     --ion-color-step-1000: var(--black);
 
     @each $color-name, $unused in $colors {
+
         @include generate-color($color-name, $colors);
     }
 
@@ -121,9 +123,10 @@
     --core-bottom-tabs-color-selected: var(--primary);
     --core-bottom-tabs-background-selected: transparent;
     --core-bottom-tabs-badge-color: var(--primary);
-    --core-bottom-tabs-badge-text-color: var(--primary-contrast);
+    --core-bottom-tabs-badge-text-color: var(--primary-contrast); // color texto menu
     --bottom-tabs-size: 48px;
     --side-tabs-size: 56px;
+
     ion-tab-bar.mainmenu-tabs {
         --background: var(--core-bottom-tabs-background);
         --color: var(--core-bottom-tabs-color);
