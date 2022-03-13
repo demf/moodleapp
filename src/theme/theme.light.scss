@@ -6,6 +6,7 @@
  */
 
 :root {
+    --ion-color-primary-contrast: #ffffff;
 
     // Color palette
     --black:           #{$black}; // Headings, standard text.
@@ -42,6 +43,12 @@
     --brand-color-contrast: var(--text-color);
 
     --core-online-color: #5cb85c;
+
+        //adipa
+    --morado:          #7d61f1;
+    $cielo:           #cce9f9;
+    $lila:            #aaa2f9;
+    $celeste:         #72caf7;
 
     // Named Color Variables
     --primary:      var(--brand-color);
@@ -85,12 +92,12 @@
         --background-alternative: var(--gray-lighter);
     }
 
-    --core-bottom-tabs-background: var(--black);
-    --core-bottom-tabs-color: var(--gray-lighter);
+    --core-bottom-tabs-background: var(--white);
+    --core-bottom-tabs-color: var(--gray);
     --core-bottom-tabs-color-selected: var(--brand-color);
     --core-bottom-tabs-background-selected: transparent;
     --core-bottom-tabs-badge-color: var(--brand-color);
-    --core-bottom-tabs-badge-text-color: var(--brand-color-contrast);
+    --core-bottom-tabs-badge-text-color: var(--white); // color texto menu
     --bottom-tabs-size: 56px;
     ion-tab-bar.mainmenu-tabs {
         --background: var(--core-bottom-tabs-background);
@@ -105,10 +112,10 @@
     }
 
     --core-header-toolbar-button-image-size: 44px;
-    --core-header-toolbar-background: var(--white);
+    --core-header-toolbar-background: var(--brand-color);
     --core-header-toolbar-border-width: 3px;
     --core-header-toolbar-border-color: var(--brand-color);
-    --core-header-toolbar-color: var(--black);
+    --core-header-toolbar-color: var(--white);
     --core-header-toolbar-height: 56px;
     html.ios {
         --core-header-toolbar-height: 54px;
