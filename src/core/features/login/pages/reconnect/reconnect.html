@@ -22,9 +22,9 @@
         </div>
 
         <p *ngIf="siteName" class="ion-padding core-sitename">
-            <core-format-text [text]="siteName" [filter]="false"></core-format-text>
+            <core-format-text [text]="" [filter]="false">¡Queremos que vivas la mejor experiencia de aprendizaje! </core-format-text>
         </p>
-        <p class="core-siteurl">{{siteUrl}}</p>
+
 
         <ion-card *ngIf="!isLoggedOut" class="core-danger-card core-login-reconnect-warning">
             <ion-item>
