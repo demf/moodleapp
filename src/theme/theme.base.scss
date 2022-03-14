@@ -304,6 +304,7 @@ ion-fab-button {
 }
 
 ion-button {
+    //color: var(--primary);
     margin: 4px 8px;
 
     ion-spinner[slot=start],
@@ -365,10 +366,12 @@ ion-button ion-spinner {
 }
 
 ion-button.button-has-icon-only {
+    color: var(--primary);
     margin: 2px;
 }
 
 ion-button:not(.button-has-icon-only):not(.button-small) > ion-icon {
+    color: var(--primary);
     min-width: 20px;
 }
 
@@ -942,6 +945,7 @@ ion-badge {
     line-height: 1.1;
     padding: 2px 8px;
     border-radius: var(--big-radius);
+    color: white;
 }
 
 ion-chip,
