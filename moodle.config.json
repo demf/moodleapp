@@ -1,13 +1,13 @@
 {
-    "app_id": "com.moodle.moodlemobile",
-    "appname": "Moodle Mobile",
+    "app_id": "com.adipa.adipamobile",
+    "appname": "Adipa Mobile",
     "versioncode": 40000,
     "versionname": "4.0.0-dev",
     "cache_update_frequency_usually": 420000,
     "cache_update_frequency_often": 1200000,
     "cache_update_frequency_sometimes": 3600000,
     "cache_update_frequency_rarely": 43200000,
-    "default_lang": "es",
+    "default_lang": "es-mx",
     "languages": {
         "af": "Afrikaans",
         "ar": "عربي",
@@ -88,7 +88,7 @@
     "sitefindersettings": {},
     "onlyallowlistedsites": false,
     "skipssoconfirmation": false,
-    "forcedefaultlanguage": false,
+    "forcedefaultlanguage": true,
     "privacypolicy": "https://moodle.net/moodle-app-privacy/",
     "notificoncolor": "#f98012",
     "enableanalytics": false,
@@ -97,7 +97,7 @@
     "forceLoginLogo": true,
     "ioswebviewscheme": "moodleappfs",
     "appstores": {
-        "android": "com.moodle.moodlemobile",
+        "android": "com.adipa.adipamobile",
         "ios": "id633359593"
     },
     "wsrequestqueuelimit": 10,
