@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { CoreSiteInfo } from '@classes/site';
+import { CoreUserTours, CoreUserToursAlignment, CoreUserToursSide } from '@features/usertours/services/user-tours';
 import { IonRouterOutlet } from '@ionic/angular';
+import { CoreScreen } from '@services/screen';
 import { CoreSites } from '@services/sites';
 import { CoreDomUtils } from '@services/utils/dom';
+import { CoreMainMenuUserMenuTourComponent } from '../user-menu-tour/user-menu-tour';
 import { CoreMainMenuUserMenuComponent } from '../user-menu/user-menu';
 
 /**
@@ -33,6 +36,8 @@ export class CoreMainMenuUserButtonComponent implements OnInit {
 
     siteInfo?: CoreSiteInfo;
     isMainScreen = false;
+
+    @ViewChild('avatar', { read: ElementRef }) avatar?: ElementRef<HTMLElement>;
 
     constructor(protected routerOutlet: IonRouterOutlet) {
         const currentSite = CoreSites.getRequiredCurrentSite();
@@ -58,6 +63,23 @@ export class CoreMainMenuUserButtonComponent implements OnInit {
 
         CoreDomUtils.openSideModal<void>({
             component: CoreMainMenuUserMenuComponent,
+        });
+    }
+
+    /**
+     * Show User Tour.
+     */
+    async showTour(): Promise<void> {
+        if (!this.avatar) {
+            return;
+        }
+
+        await CoreUserTours.showIfPending({
+            id: 'user-menu',
+            component: CoreMainMenuUserMenuTourComponent,
+            focus: this.avatar.nativeElement,
+            alignment: CoreUserToursAlignment.Start,
+            side: CoreScreen.isMobile ? CoreUserToursSide.Start : CoreUserToursSide.End,
         });
     }
 

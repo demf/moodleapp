@@ -60,6 +60,7 @@ export interface CoreEventsData {
     [CoreEvents.FILE_SHARED]: CoreEventFileSharedData;
     [CoreEvents.APP_LAUNCHED_URL]: CoreEventAppLaunchedData;
     [CoreEvents.ORIENTATION_CHANGE]: CoreEventOrientationData;
+    [CoreEvents.COURSE_MODULE_VIEWED]: CoreEventCourseModuleViewed;
 }
 
 /*
@@ -101,6 +102,9 @@ export class CoreEvents {
     static readonly APP_LAUNCHED_URL = 'app_launched_url'; // App opened with a certain URL (custom URL scheme).
     static readonly FILE_SHARED = 'file_shared';
     static readonly KEYBOARD_CHANGE = 'keyboard_change';
+    /**
+     * @deprecated since app 4.0. Use CoreComponentsRegistry promises instead.
+     */
     static readonly CORE_LOADING_CHANGED = 'core_loading_changed';
     static readonly ORIENTATION_CHANGE = 'orientation_change';
     static readonly SEND_ON_ENTER_CHANGED = 'send_on_enter_changed';
@@ -110,6 +114,7 @@ export class CoreEvents {
     static readonly FORM_ACTION = 'form_action';
     static readonly ACTIVITY_DATA_SENT = 'activity_data_sent';
     static readonly DEVICE_REGISTERED_IN_MOODLE = 'device_registered_in_moodle';
+    static readonly COURSE_MODULE_VIEWED = 'course_module_viewed';
 
     protected static logger = CoreLogger.getInstance('CoreEvents');
     protected static observables: { [eventName: string]: Subject<unknown> } = {};
@@ -426,4 +431,14 @@ export type CoreEventAppLaunchedData = {
  */
 export type CoreEventOrientationData = {
     orientation: CoreScreenOrientation;
+};
+
+/**
+ * Data passed to COURSE_MODULE_VIEWED event.
+ */
+export type CoreEventCourseModuleViewed = {
+    courseId: number;
+    cmId: number;
+    timeaccess: number;
+    sectionId?: number;
 };

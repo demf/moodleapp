@@ -23,6 +23,7 @@ import {
     Optional,
     ViewContainerRef,
     ViewChild,
+    OnDestroy,
 } from '@angular/core';
 import { IonContent } from '@ionic/angular';
 
@@ -41,6 +42,9 @@ import { CoreFilterHelper } from '@features/filter/services/filter-helper';
 import { CoreSubscriptions } from '@singletons/subscriptions';
 import { CoreComponentsRegistry } from '@singletons/components-registry';
 import { CoreCollapsibleItemDirective } from './collapsible-item';
+import { CoreCancellablePromise } from '@classes/cancellable-promise';
+import { AsyncComponent } from '@classes/async-component';
+import { CoreText } from '@singletons/text';
 
 /**
  * Directive to format text rendered. It renders the HTML and treats all links and media, using CoreLinkDirective
@@ -54,7 +58,7 @@ import { CoreCollapsibleItemDirective } from './collapsible-item';
 @Directive({
     selector: 'core-format-text',
 })
-export class CoreFormatTextDirective implements OnChanges {
+export class CoreFormatTextDirective implements OnChanges, OnDestroy, AsyncComponent {
 
     @ViewChild(CoreCollapsibleItemDirective) collapsible?: CoreCollapsibleItemDirective;
 
@@ -87,7 +91,8 @@ export class CoreFormatTextDirective implements OnChanges {
 
     protected element: HTMLElement;
     protected emptyText = '';
-    protected contentSpan: HTMLElement;
+    protected domPromises: CoreCancellablePromise<void>[] = [];
+    protected domElementPromise?: CoreCancellablePromise<void>;
 
     constructor(
         element: ElementRef,
@@ -97,18 +102,10 @@ export class CoreFormatTextDirective implements OnChanges {
         CoreComponentsRegistry.register(element.nativeElement, this);
 
         this.element = element.nativeElement;
-        this.element.classList.add('core-format-text-loading'); // Hide contents until they're treated.
-
-        const placeholder = document.createElement('span');
-        placeholder.classList.add('core-format-text-loader');
-        this.element.appendChild(placeholder);
-
-        this.contentSpan = document.createElement('span');
-        this.contentSpan.classList.add('core-format-text-content');
-        this.element.appendChild(this.contentSpan);
+        this.element.classList.add('core-loading'); // Hide contents until they're treated.
 
         this.emptyText = this.hideIfEmpty ? '' : '&nbsp;';
-        this.contentSpan.innerHTML = this.emptyText;
+        this.element.innerHTML = this.emptyText;
 
         this.afterRender = new EventEmitter<void>();
 
@@ -127,10 +124,18 @@ export class CoreFormatTextDirective implements OnChanges {
     }
 
     /**
-     * Wait until the text is fully rendered.
+     * @inheritdoc
      */
-    async rendered(): Promise<void> {
-        if (!this.element.classList.contains('core-format-text-loading')) {
+    ngOnDestroy(): void {
+        this.domElementPromise?.cancel();
+        this.domPromises.forEach((promise) => { promise.cancel();});
+    }
+
+    /**
+     * @inheritdoc
+     */
+    async ready(): Promise<void> {
+        if (!this.element.classList.contains('core-loading')) {
             return;
         }
 
@@ -217,14 +222,14 @@ export class CoreFormatTextDirective implements OnChanges {
     /**
      * Add magnifying glass icons to view adapted images at full size.
      */
-    addMagnifyingGlasses(): void {
-        const imgs = Array.from(this.contentSpan.querySelectorAll('.core-adapted-img-container > img'));
+    async addMagnifyingGlasses(): Promise<void> {
+        const imgs = Array.from(this.element.querySelectorAll('.core-adapted-img-container > img'));
         if (!imgs.length) {
             return;
         }
 
         // If cannot calculate element's width, use viewport width to avoid false adapt image icons appearing.
-        const elWidth = this.getElementWidth(this.element) || window.innerWidth;
+        const elWidth = await this.getElementWidth();
 
         imgs.forEach((img: HTMLImageElement) => {
             // Skip image if it's inside a link.
@@ -300,7 +305,7 @@ export class CoreFormatTextDirective implements OnChanges {
      */
     protected async finishRender(): Promise<void> {
         // Show the element again.
-        this.element.classList.remove('core-format-text-loading');
+        this.element.classList.remove('core-loading');
 
         await CoreUtils.nextTick();
 
@@ -313,7 +318,7 @@ export class CoreFormatTextDirective implements OnChanges {
      */
     protected async formatAndRenderContents(): Promise<void> {
         if (!this.text) {
-            this.contentSpan.innerHTML = this.emptyText; // Remove current contents.
+            this.element.innerHTML = this.emptyText; // Remove current contents.
 
             await this.finishRender();
 
@@ -331,10 +336,10 @@ export class CoreFormatTextDirective implements OnChanges {
         // Disable media adapt to correctly calculate the height.
         this.element.classList.add('core-disable-media-adapt');
 
-        this.contentSpan.innerHTML = ''; // Remove current contents.
+        this.element.innerHTML = ''; // Remove current contents.
 
         // Move the children to the current element to be able to calculate the height.
-        CoreDomUtils.moveChildren(result.div, this.contentSpan);
+        CoreDomUtils.moveChildren(result.div, this.element);
 
         await CoreUtils.nextTick();
 
@@ -351,7 +356,7 @@ export class CoreFormatTextDirective implements OnChanges {
         if (result.options.filter) {
             // Let filters handle HTML. We do it here because we don't want them to block the render of the text.
             CoreFilterDelegate.handleHtml(
-                this.contentSpan,
+                this.element,
                 result.filters,
                 this.viewContainerRef,
                 result.options,
@@ -543,41 +548,43 @@ export class CoreFormatTextDirective implements OnChanges {
     /**
      * Returns the element width in pixels.
      *
-     * @param element Element to get width from.
-     * @return The width of the element in pixels. When 0 is returned it means the element is not visible.
+     * @return The width of the element in pixels.
      */
-    protected getElementWidth(element: HTMLElement): number {
-        let width = CoreDomUtils.getElementWidth(element);
+    protected async getElementWidth(): Promise<number> {
+        if (!this.domElementPromise) {
+            this.domElementPromise = CoreDomUtils.waitToBeInDOM(this.element);
+        }
+        await this.domElementPromise;
 
+        let width = this.element.getBoundingClientRect().width;
         if (!width) {
             // All elements inside are floating or inline. Change display mode to allow calculate the width.
-            const parentWidth = element.parentElement ?
-                CoreDomUtils.getElementWidth(element.parentElement, true, false, false, true) : 0;
-            const previousDisplay = getComputedStyle(element, null).display;
+            const previousDisplay = getComputedStyle(this.element).display;
 
-            element.style.display = 'inline-block';
+            this.element.style.display = 'inline-block';
+            await CoreUtils.nextTick();
 
-            width = CoreDomUtils.getElementWidth(element);
+            width = this.element.getBoundingClientRect().width;
 
-            // If width is incorrectly calculated use parent width instead.
-            if (parentWidth > 0 && (!width || width > parentWidth)) {
-                width = parentWidth;
-            }
-
-            element.style.display = previousDisplay;
+            this.element.style.display = previousDisplay;
         }
 
-        return width;
-    }
+        // Aproximate using parent elements.
+        let element = this.element;
+        while (!width && element.parentElement) {
+            element = element.parentElement;
+            const computedStyle = getComputedStyle(element);
 
-    /**
-     * Returns the element height in pixels.
-     *
-     * @param elementAng Element to get height from.
-     * @return The height of the element in pixels. When 0 is returned it means the element is not visible.
-     */
-    protected getElementHeight(element: HTMLElement): number {
-        return CoreDomUtils.getElementHeight(element) || 0;
+            const padding = CoreDomUtils.getComputedStyleMeasure(computedStyle, 'paddingLeft') +
+                    CoreDomUtils.getComputedStyleMeasure(computedStyle, 'paddingRight');
+
+            // Use parent width as an aproximation.
+            width = element.getBoundingClientRect().width - padding;
+        }
+
+        return width > 0 && width < window.innerWidth
+            ? width
+            : window.innerWidth;
     }
 
     /**
@@ -683,7 +690,7 @@ export class CoreFormatTextDirective implements OnChanges {
             // Check if it's a Vimeo video. If it is, use the wsplayer script instead to make restricted videos work.
             const matches = src.match(/https?:\/\/player\.vimeo\.com\/video\/([0-9]+)([?&]+h=([a-zA-Z0-9]*))?/);
             if (matches && matches[1]) {
-                let newUrl = CoreTextUtils.concatenatePaths(site.getURL(), '/media/player/vimeo/wsplayer.php?video=') +
+                let newUrl = CoreText.concatenatePaths(site.getURL(), '/media/player/vimeo/wsplayer.php?video=') +
                     matches[1] + '&token=' + site.getToken();
 
                 let privacyHash: string | undefined | null = matches[3];
@@ -697,6 +704,11 @@ export class CoreFormatTextDirective implements OnChanges {
                     newUrl += `&h=${privacyHash}`;
                 }
 
+                const domPromise = CoreDomUtils.waitToBeInDOM(iframe);
+                this.domPromises.push(domPromise);
+
+                await domPromise;
+
                 // Width and height are mandatory, we need to calculate them.
                 let width: string | number;
                 let height: string | number;
@@ -704,7 +716,7 @@ export class CoreFormatTextDirective implements OnChanges {
                 if (iframe.width) {
                     width = iframe.width;
                 } else {
-                    width = this.getElementWidth(iframe);
+                    width = iframe.getBoundingClientRect().width;
                     if (!width) {
                         width = window.innerWidth;
                     }
@@ -713,7 +725,7 @@ export class CoreFormatTextDirective implements OnChanges {
                 if (iframe.height) {
                     height = iframe.height;
                 } else {
-                    height = this.getElementHeight(iframe);
+                    height = iframe.getBoundingClientRect().height;
                     if (!height) {
                         height = width;
                     }

@@ -40,6 +40,7 @@ import { CoreNavigator } from '@services/navigator';
 import { AddonCalendarFilter } from './calendar-helper';
 import { AddonCalendarSyncEvents, AddonCalendarSyncProvider } from './calendar-sync';
 import { CoreEvents } from '@singletons/events';
+import { CoreText } from '@singletons/text';
 
 const ROOT_CACHE_KEY = 'mmaCalendar:';
 
@@ -777,6 +778,7 @@ export class AddonCalendarProvider {
         const reminder: Partial<AddonCalendarReminderDBRecord> = {
             eventid: event.id,
             time: time ?? null,
+            timecreated: Date.now(),
         };
 
         const reminderId = await site.getDb().insertRecord(REMINDERS_TABLE, reminder);
@@ -913,7 +915,7 @@ export class AddonCalendarProvider {
     async getEventReminders(id: number, siteId?: string): Promise<AddonCalendarReminderDBRecord[]> {
         const site = await CoreSites.getSite(siteId);
 
-        return await site.getDb().getRecords(REMINDERS_TABLE, { eventid: id }, 'time ASC');
+        return await site.getDb().getRecords(REMINDERS_TABLE, { eventid: id }, 'timecreated ASC, time ASC');
     }
 
     /**
@@ -1217,7 +1219,7 @@ export class AddonCalendarProvider {
      */
     async getViewUrl(view: string, time?: number, courseId?: string, siteId?: string): Promise<string> {
         const site = await CoreSites.getSite(siteId);
-        let url = CoreTextUtils.concatenatePaths(site.getURL(), 'calendar/view.php?view=' + view);
+        let url = CoreText.concatenatePaths(site.getURL(), 'calendar/view.php?view=' + view);
 
         if (time) {
             url += '&time=' + time;
@@ -1696,7 +1698,7 @@ export class AddonCalendarProvider {
             const event = await AddonCalendarOffline.saveEvent(eventId, formData, siteId);
 
             // Now save the reminders if any.
-            if (options.reminders) {
+            if (options.reminders?.length) {
                 await CoreUtils.ignoreErrors(
                     Promise.all(options.reminders.map((reminder) => this.addEventReminder(event, reminder.time, siteId))),
                 );
@@ -1718,7 +1720,7 @@ export class AddonCalendarProvider {
             const event = await this.submitEventOnline(eventId, formData, siteId);
 
             // Now save the reminders if any.
-            if (options.reminders) {
+            if (options.reminders?.length) {
                 await CoreUtils.ignoreErrors(
                     Promise.all(options.reminders.map((reminder) => this.addEventReminder(event, reminder.time, siteId))),
                 );

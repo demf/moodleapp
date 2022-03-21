@@ -49,7 +49,8 @@
 
 <!-- Course Index button. -->
 <ion-fab slot="fixed" core-fab vertical="bottom" horizontal="end" *ngIf="loaded && displayCourseIndex">
-    <ion-fab-button (click)="openCourseIndex()" [attr.aria-label]="'core.course.courseindex' | translate" color="secondary">
+    <ion-fab-button (click)="openCourseIndex()" (onAppear)="showCourseIndexTour()" [attr.aria-label]="'core.course.courseindex' | translate"
+        color="secondary" #courseIndexFab>
         <ion-icon name="fas-list-ul" aria-hidden="true"></ion-icon>
         <span class="sr-only">{{'core.course.courseindex' | translate }}</span>
     </ion-fab-button>
@@ -97,7 +98,9 @@
 
         <ng-container *ngFor="let module of section.modules">
             <core-course-module *ngIf="module.visibleoncoursepage !== 0" [module]="module" [section]="section"
-                [showActivityDates]="course.showactivitydates" [showCompletionConditions]="course.showcompletionconditions">
+                [showActivityDates]="course.showactivitydates" [showCompletionConditions]="course.showcompletionconditions"
+                [isLastViewed]="lastModuleViewed && lastModuleViewed.cmId === module.id" [class.core-course-module-not-viewed]="
+                    !viewedModules[module.id] && (!module.completiondata || module.completiondata.state === completionStatusIncomplete)">
             </core-course-module>
         </ng-container>
     </section>

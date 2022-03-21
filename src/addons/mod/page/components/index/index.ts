@@ -33,7 +33,7 @@ export class AddonModPageIndexComponent extends CoreCourseModuleMainResourceComp
 
     component = AddonModPageProvider.COMPONENT;
     contents?: string;
-    displayDescription = true;
+    displayDescription = false;
     displayTimemodified = true;
     timemodified?: number;
     page?: AddonModPagePage;
@@ -52,13 +52,6 @@ export class AddonModPageIndexComponent extends CoreCourseModuleMainResourceComp
         super.ngOnInit();
 
         await this.loadContent();
-
-        try {
-            await AddonModPage.logView(this.module.instance, this.module.name);
-            CoreCourse.checkModuleCompletion(this.courseId, this.module.completiondata);
-        } catch {
-            // Ignore errors.
-        }
     }
 
     /**
@@ -116,6 +109,13 @@ export class AddonModPageIndexComponent extends CoreCourseModuleMainResourceComp
         }
 
         this.timemodified = 'timemodified' in this.page ? this.page.timemodified : undefined;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    protected async logActivity(): Promise<void> {
+        await AddonModPage.logView(this.module.instance, this.module.name);
     }
 
 }

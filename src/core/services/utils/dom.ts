@@ -53,6 +53,8 @@ import { NavigationStart } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { CoreComponentsRegistry } from '@singletons/components-registry';
+import { CoreEventObserver } from '@singletons/events';
+import { CoreCancellablePromise } from '@classes/cancellable-promise';
 
 /*
  * "Utils" service with helper functions for UI, DOM elements and HTML code.
@@ -92,6 +94,155 @@ export class CoreDomUtilsProvider {
     }
 
     /**
+     * Wait an element to be in dom of another element.
+     *
+     * @param element Element to wait.
+     * @return Cancellable promise.
+     */
+    waitToBeInDOM(element: HTMLElement): CoreCancellablePromise<void> {
+        const root = element.getRootNode({ composed: true });
+
+        if (root === document) {
+            // Already in DOM.
+            return CoreCancellablePromise.resolve();
+        }
+
+        let observer: MutationObserver;
+
+        return new CoreCancellablePromise<void>(
+            (resolve) => {
+                observer = new MutationObserver(() => {
+                    const root = element.getRootNode({ composed: true });
+
+                    if (root !== document) {
+                        return;
+                    }
+
+                    observer?.disconnect();
+                    resolve();
+                });
+
+                observer.observe(document.body, { subtree: true, childList: true });
+            },
+            () => {
+                observer?.disconnect();
+            },
+        );
+    }
+
+    /**
+     * Wait an element to be in dom and visible.
+     *
+     * @param element Element to wait.
+     * @return Cancellable promise.
+     */
+    waitToBeVisible(element: HTMLElement): CoreCancellablePromise<void> {
+        const domPromise = CoreDomUtils.waitToBeInDOM(element);
+
+        let interval: number | undefined;
+
+        // Mutations did not observe for visibility properties.
+        return new CoreCancellablePromise<void>(
+            async (resolve) => {
+                await domPromise;
+
+                if (CoreDomUtils.isElementVisible(element)) {
+                    return resolve();
+                }
+
+                interval = window.setInterval(() => {
+                    if (!CoreDomUtils.isElementVisible(element)) {
+                        return;
+                    }
+
+                    resolve();
+                    window.clearInterval(interval);
+                }, 50);
+            },
+            () => {
+                domPromise.cancel();
+                window.clearInterval(interval);
+            },
+        );
+    }
+
+    /**
+     * Wait an element to be in dom and visible.
+     *
+     * @param element Element to wait.
+     * @param intersectionRatio Intersection ratio (From 0 to 1).
+     * @return Cancellable promise.
+     */
+    waitToBeInViewport(element: HTMLElement, intersectionRatio = 1): CoreCancellablePromise<void> {
+        const visiblePromise = CoreDomUtils.waitToBeVisible(element);
+
+        let intersectionObserver: IntersectionObserver;
+        let interval: number | undefined;
+
+        return new CoreCancellablePromise<void>(
+            async (resolve) => {
+                await visiblePromise;
+
+                if (CoreDomUtils.isElementInViewport(element, intersectionRatio)) {
+
+                    return resolve();
+                }
+
+                if ('IntersectionObserver' in window) {
+                    intersectionObserver = new IntersectionObserver((observerEntries) => {
+                        const isIntersecting = observerEntries
+                            .some((entry) => entry.isIntersecting && entry.intersectionRatio >= intersectionRatio);
+                        if (!isIntersecting) {
+                            return;
+                        }
+
+                        resolve();
+                        intersectionObserver?.disconnect();
+                    });
+
+                    intersectionObserver.observe(element);
+                } else {
+                    interval = window.setInterval(() => {
+                        if (!CoreDomUtils.isElementInViewport(element, intersectionRatio)) {
+                            return;
+                        }
+
+                        resolve();
+                        window.clearInterval(interval);
+                    }, 50);
+                }
+            },
+            () => {
+                visiblePromise.cancel();
+                intersectionObserver?.disconnect();
+                window.clearInterval(interval);
+            },
+        );
+    }
+
+    /**
+     * Window resize is widely checked and may have many performance issues, debouce usage is needed to avoid calling it too much.
+     * This function helps setting up the debounce feature and remove listener easily.
+     *
+     * @param resizeFunction Function to execute on resize.
+     * @param debounceDelay Debounce time in ms.
+     * @return Event observer to call off when finished.
+     */
+    onWindowResize(resizeFunction: (ev?: Event) => void, debounceDelay = 20): CoreEventObserver {
+        const resizeListener = CoreUtils.debounce((ev?: Event) => {
+            resizeFunction(ev);
+        }, debounceDelay);
+
+        window.addEventListener('resize', resizeListener);
+
+        return {
+            off: (): void => {
+                window.removeEventListener('resize', resizeListener);
+            },
+        };
+    }
+
+    /**
      * Equivalent to element.closest(). If the browser doesn't support element.closest, it will
      * traverse the parents to achieve the same functionality.
      * Returns the closest ancestor of the current element (or the current element itself) which matches the selector.
@@ -99,45 +250,10 @@ export class CoreDomUtilsProvider {
      * @param element DOM Element.
      * @param selector Selector to search.
      * @return Closest ancestor.
+     * @deprecated since app 4.0 Not needed anymore since it's supported on both Android and iOS. Use closest instead.
      */
     closest(element: Element | undefined | null, selector: string): Element | null {
-        if (!element) {
-            return null;
-        }
-
-        // Try to use closest if the browser supports it.
-        if (typeof element.closest == 'function') {
-            return element.closest(selector);
-        }
-
-        if (!this.matchesFunctionName) {
-            // Find the matches function supported by the browser.
-            ['matches', 'webkitMatchesSelector', 'mozMatchesSelector', 'msMatchesSelector', 'oMatchesSelector'].some((fn) => {
-                if (typeof document.body[fn] == 'function') {
-                    this.matchesFunctionName = fn;
-
-                    return true;
-                }
-
-                return false;
-            });
-
-            if (!this.matchesFunctionName) {
-                return null;
-            }
-        }
-
-        // Traverse parents.
-        let elementToTreat: Element | null = element;
-
-        while (elementToTreat) {
-            if (elementToTreat[this.matchesFunctionName](selector)) {
-                return elementToTreat;
-            }
-            elementToTreat = elementToTreat.parentElement;
-        }
-
-        return null;
+        return element?.closest(selector) ?? null;
     }
 
     /**
@@ -430,6 +546,7 @@ export class CoreDomUtilsProvider {
      * @param useBorder Whether to use borders to calculate the measure.
      * @param innerMeasure If inner measure is needed: padding, margin or borders will be substracted.
      * @return Height in pixels.
+     * @deprecated since app 4.0 Use getBoundingClientRect.height instead.
      */
     getElementHeight(
         element: HTMLElement,
@@ -451,6 +568,7 @@ export class CoreDomUtilsProvider {
      * @param useBorder Whether to use borders to calculate the measure.
      * @param innerMeasure If inner measure is needed: padding, margin or borders will be substracted.
      * @return Measure in pixels.
+     * @deprecated since app 4.0 Use getBoundingClientRect.height or width instead.
      */
     getElementMeasure(
         element: HTMLElement,
@@ -523,6 +641,7 @@ export class CoreDomUtilsProvider {
      * @param useBorder Whether to use borders to calculate the measure.
      * @param innerMeasure If inner measure is needed: padding, margin or borders will be substracted.
      * @return Width in pixels.
+     * @deprecated since app 4.0 Use getBoundingClientRect.width instead.
      */
     getElementWidth(
         element: HTMLElement,
@@ -702,6 +821,7 @@ export class CoreDomUtilsProvider {
      *
      * @param findFunction The function used to find the element.
      * @return Resolved if found, rejected if too many tries.
+     * @deprecated since app 4.0 Use waitToBeInDOM instead.
      */
     waitElementToExist(findFunction: () => HTMLElement | null): Promise<HTMLElement> {
         const promiseInterval = CoreUtils.promiseDefer<HTMLElement>();
@@ -803,6 +923,63 @@ export class CoreDomUtilsProvider {
         const scrollTopPos = scrollElRect?.top || 0;
 
         return elementPoint > window.innerHeight || elementPoint < scrollTopPos;
+    }
+
+    /**
+     * Check whether an element has been added to the DOM.
+     *
+     * @param element Element.
+     * @return True if element has been added to the DOM, false otherwise.
+     */
+    isElementInDom(element: HTMLElement): boolean {
+        return element.getRootNode({ composed: true }) === document;
+    }
+
+    /**
+     * Check whether an element is visible or not.
+     *
+     * @param element Element.
+     * @return True if element is visible inside the DOM.
+     */
+    isElementVisible(element: HTMLElement): boolean {
+        if (element.clientWidth === 0 || element.clientHeight === 0) {
+            return false;
+        }
+
+        const style = getComputedStyle(element);
+        if (style.opacity === '0' || style.display === 'none' || style.visibility === 'hidden') {
+            return false;
+        }
+
+        return CoreDomUtils.isElementInDom(element);
+    }
+
+    /**
+     * Check whether an element is intersecting the intersectionRatio in viewport.
+     *
+     * @param element
+     * @param intersectionRatio Intersection ratio (From 0 to 1).
+     * @return True if in viewport.
+     */
+    isElementInViewport(element: HTMLElement, intersectionRatio = 1): boolean {
+        const elementRectangle = element.getBoundingClientRect();
+
+        const elementArea = elementRectangle.width * elementRectangle.height;
+        if (elementArea == 0) {
+            return false;
+        }
+
+        const intersectionRectangle = {
+            top: Math.max(0, elementRectangle.top),
+            left: Math.max(0, elementRectangle.left),
+            bottom: Math.min(window.innerHeight, elementRectangle.bottom),
+            right: Math.min(window.innerWidth, elementRectangle.right),
+        };
+
+        const intersectionArea = (intersectionRectangle.right - intersectionRectangle.left) *
+            (intersectionRectangle.bottom - intersectionRectangle.top);
+
+        return intersectionArea / elementArea >= intersectionRatio;
     }
 
     /**
@@ -1035,7 +1212,7 @@ export class CoreDomUtilsProvider {
             const scrollElement = await content.getScrollElement();
 
             return scrollElement.clientHeight || 0;
-        } catch (error) {
+        } catch {
             return 0;
         }
     }
@@ -1051,7 +1228,7 @@ export class CoreDomUtilsProvider {
             const scrollElement = await content.getScrollElement();
 
             return scrollElement.scrollHeight || 0;
-        } catch (error) {
+        } catch {
             return 0;
         }
     }

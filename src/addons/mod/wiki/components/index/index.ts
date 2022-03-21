@@ -26,10 +26,10 @@ import { CoreGroup, CoreGroups } from '@services/groups';
 import { CoreNavigator } from '@services/navigator';
 import { CoreSites } from '@services/sites';
 import { CoreDomUtils } from '@services/utils/dom';
-import { CoreTextUtils } from '@services/utils/text';
 import { CoreUtils } from '@services/utils/utils';
 import { Network, Translate, NgZone } from '@singletons';
 import { CoreEventObserver, CoreEvents } from '@singletons/events';
+import { CoreText } from '@singletons/text';
 import { Subscription } from 'rxjs';
 import { Md5 } from 'ts-md5';
 import { AddonModWikiPageDBRecord } from '../../services/database/wiki';
@@ -147,24 +147,6 @@ export class AddonModWikiIndexComponent extends CoreCourseModuleMainActivityComp
             if (this.action == 'map') {
                 this.openMap();
             }
-        }
-
-        if (!this.wiki) {
-            CoreNavigator.back();
-
-            return;
-        }
-
-        if (!this.pageId) {
-            try {
-                await AddonModWiki.logView(this.wiki.id, this.wiki.name);
-
-                CoreCourse.checkModuleCompletion(this.courseId, this.module.completiondata);
-            } catch {
-                // Ignore errors.
-            }
-        } else {
-            CoreUtils.ignoreErrors(AddonModWiki.logPageView(this.pageId, this.wiki.id, this.wiki.name));
         }
     }
 
@@ -450,6 +432,22 @@ export class AddonModWikiIndexComponent extends CoreCourseModuleMainActivityComp
     }
 
     /**
+     * @inheritdoc
+     */
+    protected async logActivity(): Promise<void> {
+        if (!this.wiki) {
+            return; // Shouldn't happen.
+        }
+
+        if (!this.pageId) {
+            await AddonModWiki.logView(this.wiki.id, this.wiki.name);
+        } else {
+            this.checkCompletionAfterLog = false;
+            CoreUtils.ignoreErrors(AddonModWiki.logPageView(this.pageId, this.wiki.id, this.wiki.name));
+        }
+    }
+
+    /**
      * Get path to the wiki home view. If cannot determine or it's current view, return undefined.
      *
      * @return The path of the home view
@@ -678,7 +676,7 @@ export class AddonModWikiIndexComponent extends CoreCourseModuleMainActivityComp
         content = content.trim();
 
         if (content.length > 0) {
-            const editUrl = CoreTextUtils.concatenatePaths(CoreSites.getRequiredCurrentSite().getURL(), '/mod/wiki/edit.php');
+            const editUrl = CoreText.concatenatePaths(CoreSites.getRequiredCurrentSite().getURL(), '/mod/wiki/edit.php');
             content = content.replace(/href="edit\.php/g, 'href="' + editUrl);
         }
 

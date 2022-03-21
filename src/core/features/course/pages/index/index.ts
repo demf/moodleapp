@@ -23,13 +23,13 @@ import { CoreEventObserver, CoreEvents } from '@singletons/events';
 import { CoreCourse, CoreCourseModuleCompletionStatus, CoreCourseWSSection } from '@features/course/services/course';
 import { CoreCourseHelper, CoreCourseModuleData } from '@features/course/services/course-helper';
 import { CoreUtils } from '@services/utils/utils';
-import { CoreTextUtils } from '@services/utils/text';
 import { CoreNavigationOptions, CoreNavigator } from '@services/navigator';
 import { CONTENTS_PAGE_NAME } from '@features/course/course.module';
 import { CoreDomUtils } from '@services/utils/dom';
 import { CoreCourseSummaryPage } from '../course-summary/course-summary';
 import { CoreCoursesHelper, CoreCourseWithImageAndColor } from '@features/courses/services/courses-helper';
 import { CoreColors } from '@singletons/colors';
+import { CoreText } from '@singletons/text';
 
 /**
  * Page that displays the list of courses the user is enrolled in.
@@ -59,6 +59,7 @@ export class CoreCourseIndexPage implements OnInit, OnDestroy {
     protected module?: CoreCourseModuleData;
     protected modNavOptions?: CoreNavigationOptions;
     protected isGuest = false;
+    protected openModule = true;
     protected contentsTab: CoreTabsOutletTab & { pageParams: Params } = {
         page: CONTENTS_PAGE_NAME,
         title: 'core.course',
@@ -138,6 +139,7 @@ export class CoreCourseIndexPage implements OnInit, OnDestroy {
         this.module = CoreNavigator.getRouteParam<CoreCourseModuleData>('module');
         this.isGuest = !!CoreNavigator.getRouteBooleanParam('isGuest');
         this.modNavOptions = CoreNavigator.getRouteParam<CoreNavigationOptions>('modNavOptions');
+        this.openModule = CoreNavigator.getRouteBooleanParam('openModule') ?? true; // If false, just scroll to module.
         if (!this.modNavOptions) {
             // Fallback to old way of passing params. @deprecated since 4.0.
             const modParams = CoreNavigator.getRouteParam<Params>('modParams');
@@ -147,7 +149,7 @@ export class CoreCourseIndexPage implements OnInit, OnDestroy {
         }
 
         this.currentPagePath = CoreNavigator.getCurrentPath();
-        this.contentsTab.page = CoreTextUtils.concatenatePaths(this.currentPagePath, this.contentsTab.page);
+        this.contentsTab.page = CoreText.concatenatePaths(this.currentPagePath, this.contentsTab.page);
         this.contentsTab.pageParams = {
             course: this.course,
             sectionId: CoreNavigator.getRouteNumberParam('sectionId'),
@@ -157,6 +159,10 @@ export class CoreCourseIndexPage implements OnInit, OnDestroy {
 
         if (this.module) {
             this.contentsTab.pageParams.moduleId = this.module.id;
+            if (!this.contentsTab.pageParams.sectionId && !this.contentsTab.pageParams.sectionNumber) {
+                // No section specified, use module section.
+                this.contentsTab.pageParams.sectionId = this.module.section;
+            }
         }
 
         this.tabs.push(this.contentsTab);
@@ -172,7 +178,7 @@ export class CoreCourseIndexPage implements OnInit, OnDestroy {
      * A tab was selected.
      */
     tabSelected(): void {
-        if (!this.module || !this.course) {
+        if (!this.module || !this.course || !this.openModule) {
             return;
         }
         // Now that the first tab has been selected we can load the module.
@@ -201,7 +207,7 @@ export class CoreCourseIndexPage implements OnInit, OnDestroy {
 
         // Create the full path.
         handlers.forEach((handler, index) => {
-            handler.data.page = CoreTextUtils.concatenatePaths(this.currentPagePath, handler.data.page);
+            handler.data.page = CoreText.concatenatePaths(this.currentPagePath, handler.data.page);
             handler.data.pageParams = handler.data.pageParams || {};
 
             // Check if this handler should be the first selected tab.

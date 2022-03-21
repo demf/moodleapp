@@ -13,12 +13,12 @@
 // limitations under the License.
 
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { CoreCourse } from '@features/course/services/course';
 import { CoreQuestionQuestionParsed } from '@features/question/services/question';
 import { CoreQuestionHelper } from '@features/question/services/question-helper';
 import { IonContent, IonRefresher } from '@ionic/angular';
 import { CoreNavigator } from '@services/navigator';
 import { CoreDomUtils } from '@services/utils/dom';
-import { CoreTextUtils } from '@services/utils/text';
 import { CoreTimeUtils } from '@services/utils/time';
 import { CoreUtils } from '@services/utils/utils';
 import { Translate } from '@singletons';
@@ -73,6 +73,7 @@ export class AddonModQuizReviewPage implements OnInit {
     protected attemptId!: number; // The attempt being reviewed.
     protected currentPage!: number; // The current page being reviewed.
     protected options?: AddonModQuizCombinedReviewOptions; // Review options.
+    protected fetchSuccess = false;
 
     constructor(
         protected elementRef: ElementRef,
@@ -99,10 +100,6 @@ export class AddonModQuizReviewPage implements OnInit {
 
         try {
             await this.fetchData();
-
-            CoreUtils.ignoreErrors(
-                AddonModQuiz.logViewAttemptReview(this.attemptId, this.quiz!.id, this.quiz!.name),
-            );
         } finally {
             this.loaded = true;
         }
@@ -160,6 +157,16 @@ export class AddonModQuizReviewPage implements OnInit {
 
             // Load questions.
             await this.loadPage(this.currentPage);
+
+            if (!this.fetchSuccess) {
+                this.fetchSuccess = true;
+                CoreUtils.ignoreErrors(
+                    AddonModQuiz.logViewAttemptReview(this.attemptId, this.quiz.id, this.quiz.name),
+                );
+
+                // Store module viewed. It's done in this page because it can be reached using a link.
+                CoreCourse.storeModuleViewed(this.courseId, this.cmId);
+            }
         } catch (error) {
             CoreDomUtils.showErrorModalDefault(error, 'addon.mod_quiz.errorgetquiz', true);
         }
@@ -303,9 +310,9 @@ export class AddonModQuizReviewPage implements OnInit {
                 };
 
                 if (this.quiz.grade != 100) {
-                    gradeObject.percent = CoreTextUtils.roundToDecimals(
-                        this.attempt.sumgrades! * 100 / this.quiz.sumgrades!,
-                        0,
+                    gradeObject.percent = AddonModQuiz.formatGrade(
+                        (this.attempt.sumgrades ?? 0) * 100 / (this.quiz.sumgrades ?? 1),
+                        this.quiz.decimalpoints,
                     );
                     this.readableGrade = Translate.instant('addon.mod_quiz.outofpercent', { $a: gradeObject });
                 } else {
