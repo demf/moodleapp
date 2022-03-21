@@ -48,6 +48,7 @@ export class CoreCourseModuleComponent implements OnInit, OnDestroy {
     @Input() showActivityDates = false; // Whether to show activity dates.
     @Input() showCompletionConditions = false; // Whether to show activity completion conditions.
     @Input() showLegacyCompletion?: boolean; // Whether to show module completion in the old format.
+    @Input() isLastViewed = false; // Whether it's the last module viewed in a course.
     @Output() completionChanged = new EventEmitter<CoreCourseModuleCompletionData>(); // Notify when module completion changes.
 
     modNameTranslated = '';
@@ -56,6 +57,7 @@ export class CoreCourseModuleComponent implements OnInit, OnDestroy {
     prefetchStatusIcon = ''; // Module prefetch status icon.
     prefetchStatusText = ''; // Module prefetch status text.
     autoCompletionTodo = false;
+    moduleHasView = true;
 
     protected prefetchHandler?: CoreCourseModulePrefetchHandler;
 
@@ -76,6 +78,7 @@ export class CoreCourseModuleComponent implements OnInit, OnDestroy {
         }
 
         this.module.handlerData.a11yTitle = this.module.handlerData.a11yTitle ?? this.module.handlerData.title;
+        this.moduleHasView = CoreCourse.moduleHasView(this.module);
 
         const completionStatus = this.showCompletionConditions && this.module.completiondata?.isautomatic &&
             this.module.completiondata.tracking == CoreCourseModuleCompletionTracking.COMPLETION_TRACKING_AUTOMATIC

@@ -21,7 +21,6 @@ import { CoreFile } from '@services/file';
 import { CoreFileHelper } from '@services/file-helper';
 import { CoreSites } from '@services/sites';
 import { CoreDomUtils } from '@services/utils/dom';
-import { CoreTextUtils } from '@services/utils/text';
 import { CoreUrlUtils } from '@services/utils/url';
 import { CoreUtils, PromiseDefer } from '@services/utils/utils';
 
@@ -30,6 +29,7 @@ import { CoreLogger } from '@singletons/logger';
 import { CoreUrl } from '@singletons/url';
 import { CoreWindow } from '@singletons/window';
 import { CoreContentLinksHelper } from '@features/contentlinks/services/contentlinks-helper';
+import { CoreText } from '@singletons/text';
 
 /**
  * Possible types of frame elements.
@@ -51,7 +51,7 @@ export class CoreIframeUtilsProvider {
     protected waitAutoLoginDefer?: PromiseDefer<void>;
 
     constructor() {
-        this.logger = CoreLogger.getInstance('CoreUtilsProvider');
+        this.logger = CoreLogger.getInstance('CoreIframeUtilsProvider');
     }
 
     /**
@@ -237,7 +237,7 @@ export class CoreIframeUtilsProvider {
             contentDocument = 'contentDocument' in element && element.contentDocument
                 ? element.contentDocument
                 : contentWindow && contentWindow.document;
-        } catch (ex) {
+        } catch {
             // Ignore errors.
         }
 
@@ -250,7 +250,7 @@ export class CoreIframeUtilsProvider {
             // It's probably an <embed>. Try to get the window and the document.
             try {
                 contentDocument = element.getSVGDocument();
-            } catch (ex) {
+            } catch {
                 // Ignore errors.
             }
 
@@ -310,10 +310,10 @@ export class CoreIframeUtilsProvider {
             };
         }
 
-        if (contentDocument) {
+        if (contentDocument.body) {
             // Search sub frames.
             CoreIframeUtilsProvider.FRAME_TAGS.forEach((tag) => {
-                const elements = Array.from(contentDocument.querySelectorAll(tag));
+                const elements = Array.from(contentDocument.body.querySelectorAll(tag));
                 elements.forEach((subElement: CoreFrameElement) => {
                     this.treatFrame(subElement, true);
                 });
@@ -333,6 +333,8 @@ export class CoreIframeUtilsProvider {
             return;
         }
 
+        element.classList.add('core-loading');
+
         const treatElement = (sendResizeEvent: boolean = false) => {
             this.checkOnlineFrameInOffline(element, isSubframe);
 
@@ -348,9 +350,12 @@ export class CoreIframeUtilsProvider {
                 this.treatFrameLinks(element, document);
             }
 
+            // Iframe content has been loaded.
             // Send a resize events to the iframe so it calculates the right size if needed.
             if (window && sendResizeEvent) {
-                setTimeout(() => window.dispatchEvent(new Event('resize')), 1000);
+                element.classList.remove('core-loading');
+
+                setTimeout(() => window.dispatchEvent && window.dispatchEvent(new Event('resize')), 1000);
             }
         };
 
@@ -415,7 +420,7 @@ export class CoreIframeUtilsProvider {
             if (src) {
                 const dirAndFile = CoreFile.getFileAndDirectoryFromPath(src);
                 if (dirAndFile.directory) {
-                    url = CoreTextUtils.concatenatePaths(dirAndFile.directory, url);
+                    url = CoreText.concatenatePaths(dirAndFile.directory, url);
                 } else {
                     this.logger.warn('Cannot get iframe dir path to open relative url', url, element);
 
@@ -555,7 +560,7 @@ export class CoreIframeUtilsProvider {
      */
     injectiOSScripts(userScriptWindow: WKUserScriptWindow): void {
         const wwwPath = CoreFile.getWWWAbsolutePath();
-        const linksPath = CoreTextUtils.concatenatePaths(wwwPath, 'assets/js/iframe-treat-links.js');
+        const linksPath = CoreText.concatenatePaths(wwwPath, 'assets/js/iframe-treat-links.js');
 
         userScriptWindow.WKUserScript?.addScript({ id: 'CoreIframeUtilsLinksScript', file: linksPath });
 

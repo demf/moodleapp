@@ -25,6 +25,7 @@ import { CoreTextUtils } from '@services/utils/text';
 import { CoreUtils } from '@services/utils/utils';
 import { CoreWSExternalFile, CoreWSExternalWarning } from '@services/ws';
 import { makeSingleton, Translate } from '@singletons';
+import { CoreText } from '@singletons/text';
 
 const ROOT_CACHE_KEY = 'mmaModImscp:';
 
@@ -154,7 +155,7 @@ export class AddonModImscpProvider {
                 return false;
             }
 
-            const filePath = CoreTextUtils.concatenatePaths(item.filepath, item.filename);
+            const filePath = CoreText.concatenatePaths(item.filepath, item.filename);
             const filePathAlt = filePath.charAt(0) === '/' ? filePath.substring(1) : '/' + filePath;
 
             // Check if it's main file.
@@ -177,7 +178,7 @@ export class AddonModImscpProvider {
         try {
             const dirPath = await CoreFilepool.getPackageDirUrlByUrl(siteId, module.url || '');
 
-            return CoreTextUtils.concatenatePaths(dirPath, itemHref);
+            return CoreText.concatenatePaths(dirPath, itemHref);
         } catch (error) {
             // Error getting directory, there was an error downloading or we're in browser. Return online URL if connected.
             if (CoreApp.isOnline()) {
@@ -303,7 +304,7 @@ export class AddonModImscpProvider {
     async storeLastItemViewed(id: number, href: string, courseId: number, siteId?: string): Promise<void> {
         const site = await CoreSites.getSite(siteId);
 
-        await site.storeLastViewed(AddonModImscpProvider.COMPONENT, id, href, String(courseId));
+        await site.storeLastViewed(AddonModImscpProvider.COMPONENT, id, href, { data: String(courseId) });
     }
 
 }

@@ -87,6 +87,11 @@
 
     --contrast-background: white;
 
+    --loader-background-color: rgba(0, 0, 0, .1);
+    --loader-shine: 251, 251, 251;
+    --loader-radius: var(--small-radius);
+    --loader-display: block;
+
     --drop-shadow-color: 0, 0, 0, 0.5;
     --drop-shadow-top: 0px 2px 5px rgba(var(--drop-shadow-color));
     --drop-shadow-bottom: 0px -2px 5px rgba(var(--drop-shadow-color));
@@ -332,7 +337,6 @@
     --core-courseimage-on-course-size: 72px;
     --core-courseimage-radius: var(--medium-radius);
 
-    --core-collapsible-footer-height: 48px;
     --core-navigation-background: var(--contrast-background);
 
     --core-collapsible-footer-background: var(--contrast-background);
@@ -384,7 +388,7 @@
 
     @for $i from 0 to length($core-course-image-background) {
         --core-course-color-#{$i}: #{nth($core-course-image-background, $i + 1)};
-        --core-course-color-#{$i}-tint: #{get-color-tint(nth($core-course-image-background, $i + 1))};
+        --core-course-color-#{$i}-tint: #{get-color-tint-percent(nth($core-course-image-background, $i + 1))};
     }
 
     @for $i from 0 to length($core-dd-question-colors) {

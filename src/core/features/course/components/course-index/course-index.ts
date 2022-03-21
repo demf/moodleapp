@@ -68,18 +68,17 @@ export class CoreCourseCourseIndexComponent implements OnInit {
             completionEnabled = this.course.showcompletionconditions;
         }
 
-        const currentSection = await CoreCourseFormatDelegate.getCurrentSection(this.course, this.sections);
+        const currentSectionData = await CoreCourseFormatDelegate.getCurrentSection(this.course, this.sections);
 
         if (this.selectedId === undefined) {
             // Highlight current section if none is selected.
-            this.selectedId = currentSection.id;
+            this.selectedId = currentSectionData.section.id;
         }
 
         // Clone sections to add information.
         this.sectionsToRender = this.sections
             .filter((section) => !section.hiddenbynumsections &&
-                section.id != CoreCourseProvider.STEALTH_MODULES_SECTION_ID &&
-                section.uservisible !== false)
+                section.id != CoreCourseProvider.STEALTH_MODULES_SECTION_ID)
             .map((section) => {
                 const modules = section.modules
                     .filter((module) => module.visibleoncoursepage !== 0 && !module.noviewlink)
@@ -103,8 +102,10 @@ export class CoreCourseCourseIndexComponent implements OnInit {
                     id: section.id,
                     name: section.name,
                     availabilityinfo: !!section.availabilityinfo,
+                    visible: !!section.visible,
+                    uservisible: section.uservisible !== false,
                     expanded: section.id === this.selectedId,
-                    highlighted: currentSection?.id === section.id,
+                    highlighted: currentSectionData.section.id === section.id,
                     hasVisibleModules: modules.length > 0,
                     modules: modules,
                 };
@@ -160,6 +161,8 @@ type CourseIndexSection = {
     expanded: boolean;
     hasVisibleModules: boolean;
     availabilityinfo: boolean;
+    visible: boolean;
+    uservisible: boolean;
     modules: {
         id: number;
         course: number;

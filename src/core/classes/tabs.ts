@@ -32,6 +32,8 @@ import { Subscription } from 'rxjs';
 import { Platform, Translate } from '@singletons';
 import { CoreSettingsHelper } from '@features/settings/services/settings-helper';
 import { CoreAriaRoleTab, CoreAriaRoleTabFindable } from './aria-role-tab';
+import { CoreEventObserver } from '@singletons/events';
+import { CoreDomUtils } from '@services/utils/dom';
 
 /**
  * Class to abstract some common code for tabs.
@@ -75,7 +77,7 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
     protected tabsElement?: HTMLElement; // The tabs parent element. It's the element that will be "scrolled" to hide tabs.
     protected tabBarElement?: HTMLIonTabBarElement; // The top tab bar element.
     protected tabsShown = true;
-    protected resizeFunction: EventListenerOrEventListenerObject;
+    protected resizeListener?: CoreEventObserver;
     protected isDestroyed = false;
     protected isCurrentView = true;
     protected shouldSlideToInitial = false; // Whether we need to slide to the initial slide because it's out of view.
@@ -99,7 +101,6 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
         protected element: ElementRef,
     ) {
         this.backButtonFunction = this.backButtonClicked.bind(this);
-        this.resizeFunction = this.windowResized.bind(this);
 
         this.tabAction = new CoreTabsRoleTab(this);
     }
@@ -134,7 +135,9 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
             await this.initializeTabs();
         }
 
-        window.addEventListener('resize', this.resizeFunction);
+        this.resizeListener = CoreDomUtils.onWindowResize(() => {
+            this.windowResized();
+        });
     }
 
     /**
@@ -303,13 +306,7 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
             this.calculateSlides();
         });
 
-        let selectedTab: T | undefined = this.tabs[this.selectedIndex || 0] || undefined;
-
-        if (!selectedTab || !selectedTab.enabled) {
-            // The tab is not enabled or not shown. Get the first tab that is enabled.
-            selectedTab = this.tabs.find((tab) => tab.enabled) || undefined;
-        }
-
+        const selectedTab = this.calculateInitialTab();
         if (!selectedTab) {
             return;
         }
@@ -324,6 +321,22 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
 
         // Check which arrows should be shown.
         this.calculateSlides();
+    }
+
+    /**
+     * Calculate the initial tab to load.
+     *
+     * @return Initial tab, undefined if no valid tab found.
+     */
+    protected calculateInitialTab(): T | undefined {
+        const selectedTab: T | undefined = this.tabs[this.selectedIndex || 0] || undefined;
+
+        if (selectedTab && selectedTab.enabled) {
+            return selectedTab;
+        }
+
+        // The tab is not enabled or not shown. Get the first tab that is enabled.
+        return this.tabs.find((tab) => tab.enabled) || undefined;
     }
 
     /**
@@ -419,24 +432,24 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
      */
     async slideNext(): Promise<void> {
         // Stop if slides are in transition.
-        if (!this.showNextButton || this.isInTransition) {
+        if (!this.showNextButton || this.isInTransition || !this.slides) {
             return;
         }
 
-        if (await this.slides!.isBeginning()) {
+        if (await this.slides.isBeginning()) {
             // Slide to the second page.
-            this.slides!.slideTo(this.maxSlides);
+            this.slides.slideTo(this.maxSlides);
         } else {
-            const currentIndex = await this.slides!.getActiveIndex();
+            const currentIndex = await this.slides.getActiveIndex();
             if (currentIndex !== undefined) {
                 const nextSlideIndex = currentIndex + this.maxSlides;
                 this.isInTransition = true;
                 if (nextSlideIndex < this.numTabsShown) {
                     // Slide to the next page.
-                    await this.slides!.slideTo(nextSlideIndex);
+                    await this.slides.slideTo(nextSlideIndex);
                 } else {
                     // Slide to the latest slide.
-                    await this.slides!.slideTo(this.numTabsShown - 1);
+                    await this.slides.slideTo(this.numTabsShown - 1);
                 }
             }
 
@@ -448,24 +461,24 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
      */
     async slidePrev(): Promise<void> {
         // Stop if slides are in transition.
-        if (!this.showPrevButton || this.isInTransition) {
+        if (!this.showPrevButton || this.isInTransition || !this.slides) {
             return;
         }
 
-        if (await this.slides!.isEnd()) {
-            this.slides!.slideTo(this.numTabsShown - this.maxSlides * 2);
+        if (await this.slides.isEnd()) {
+            this.slides.slideTo(this.numTabsShown - this.maxSlides * 2);
             // Slide to the previous of the latest page.
         } else {
-            const currentIndex = await this.slides!.getActiveIndex();
+            const currentIndex = await this.slides.getActiveIndex();
             if (currentIndex !== undefined) {
                 const prevSlideIndex = currentIndex - this.maxSlides;
                 this.isInTransition = true;
                 if (prevSlideIndex >= 0) {
                     // Slide to the previous page.
-                    await this.slides!.slideTo(prevSlideIndex);
+                    await this.slides.slideTo(prevSlideIndex);
                 } else {
                     // Slide to the first page.
-                    await this.slides!.slideTo(0);
+                    await this.slides.slideTo(0);
                 }
             }
         }
@@ -561,8 +574,8 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
         }
 
         const tabToSelect = this.tabs[index];
-        if (!tabToSelect || !tabToSelect.enabled || tabToSelect.id == this.selected) {
-            // Already selected or not enabled.
+        if (!tabToSelect || !tabToSelect.enabled) {
+            // Not enabled.
             return;
         }
 
@@ -575,15 +588,30 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
             }
         }
 
+        if (tabToSelect.id === this.selected) {
+            // Already selected.
+            return;
+        }
+
         const ok = await this.loadTab(tabToSelect);
 
         if (ok !== false) {
-            this.selectHistory.push(tabToSelect.id!);
-            this.selected = tabToSelect.id;
-            this.selectedIndex = index;
-
-            this.ionChange.emit(tabToSelect);
+            this.tabSelected(tabToSelect, index);
         }
+    }
+
+    /**
+     * Update selected tab.
+     *
+     * @param tab Tab.
+     * @param tabIndex Tab index.
+     */
+    protected tabSelected(tab: T, tabIndex: number): void {
+        this.selectHistory.push(tab.id ?? '');
+        this.selected = tab.id;
+        this.selectedIndex = tabIndex;
+
+        this.ionChange.emit(tab);
     }
 
     /**
@@ -646,9 +674,7 @@ export class CoreTabsBaseComponent<T extends CoreTabBase> implements OnInit, Aft
     ngOnDestroy(): void {
         this.isDestroyed = true;
 
-        if (this.resizeFunction) {
-            window.removeEventListener('resize', this.resizeFunction);
-        }
+        this.resizeListener?.off();
         this.languageChangedSubscription?.unsubscribe();
     }
 
