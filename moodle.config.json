@@ -7,7 +7,7 @@
     "cache_update_frequency_often": 1200000,
     "cache_update_frequency_sometimes": 3600000,
     "cache_update_frequency_rarely": 43200000,
-    "default_lang": "es-mx",
+    "default_lang": "es",
     "languages": {
         "af": "Afrikaans",
         "ar": "عربي",
@@ -89,7 +89,7 @@
     "onlyallowlistedsites": false,
     "skipssoconfirmation": false,
     "forcedefaultlanguage": true,
-    "privacypolicy": "https://moodle.net/moodle-app-privacy/",
+    "privacypolicy": "https://adipa.cl/terminos-y-condiciones",
     "notificoncolor": "#f98012",
     "enableanalytics": false,
     "enableonboarding": true,

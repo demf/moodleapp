@@ -1,7 +1,7 @@
 {
     "all": "All",
     "allincludinghidden": "All (including archived)",
-    "aria:favourites": "Show starred courses only",
+    "aria:favourites": "Show starred courses",
     "aria:hiddencourses": "Show archived courses",
     "card": "Card",
     "future": "Future",
