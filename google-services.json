@@ -8,9 +8,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:111111111111:android:1111111111111111",
+        "mobilesdk_app_id": "1:11111111111:android:111111111111111",
         "android_client_info": {
-          "package_name": "com.adipa.adipamobile"
+          "package_name": "cl.adipa.adipapp"
         }
       },
       "oauth_client": [

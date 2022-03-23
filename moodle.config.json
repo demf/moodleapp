@@ -1,8 +1,8 @@
 {
-    "app_id": "com.adipa.adipamobile",
+    "app_id": "cl.adipa.adipapp",
     "appname": "Adipa Mobile",
-    "versioncode": 40000,
-    "versionname": "4.0.0-dev",
+    "versioncode": 40003,
+    "versionname": "4.0.0",
     "cache_update_frequency_usually": 420000,
     "cache_update_frequency_often": 1200000,
     "cache_update_frequency_sometimes": 3600000,
@@ -97,7 +97,7 @@
     "forceLoginLogo": true,
     "ioswebviewscheme": "moodleappfs",
     "appstores": {
-        "android": "com.adipa.adipamobile",
+        "android": "cl.adipa.adipapp",
         "ios": "id633359593"
     },
     "wsrequestqueuelimit": 10,

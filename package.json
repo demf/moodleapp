@@ -1,10 +1,10 @@
 {
-  "name": "moodlemobile",
-  "version": "4.0.0-dev",
-  "description": "The official app for Moodle.",
+  "name": "adipamobile",
+  "version": "4.0.0",
+  "description": "The official app for Adipa.",
   "author": {
-    "name": "Moodle Pty Ltd.",
-    "email": "mobile@moodle.com"
+    "name": "Equipo Adipa",
+    "email": "info@adipaglobal.com"
   },
   "repository": {
     "type": "git",
@@ -168,6 +168,7 @@
     "jest-preset-angular": "^8.3.1",
     "jsonc-parser": "^2.3.1",
     "native-run": "^1.4.0",
+    "phonegap-plugin-multidex": "^1.0.0",
     "terser-webpack-plugin": "^4.2.3",
     "ts-jest": "^26.4.1",
     "ts-node": "~8.3.0",
