@@ -23,7 +23,8 @@
             </div>
 
             <p *ngIf="siteName" class="ion-padding core-sitename">
-                <core-format-text [text]="" [filter]="false">¡Queremos que vivas la mejor experiencia de aprendizaje!
+                ¡Queremos que vivas la mejor experiencia de aprendizaje!
+                <core-format-text [text]="" [filter]="false">
                 </core-format-text>
             </p>
 
@@ -66,14 +67,6 @@
                     </ion-col>
                 </ion-row>
             </ion-grid>
-
-            <ng-container *ngIf="showScanQR">
-                <div class="ion-text-center ion-padding">{{ 'core.login.or' | translate }}</div>
-                <ion-button expand="block" fill="outline" class="ion-margin" (click)="showInstructionsAndScanQR()">
-                    <ion-icon slot="start" name="fas-qrcode" aria-hidden="true"></ion-icon>
-                    {{ 'core.scanqr' | translate }}
-                </ion-button>
-            </ng-container>
         </form>
 
         <!-- Forgotten password option. -->
