@@ -14,7 +14,7 @@
 
 import { Injectable, SimpleChange, ElementRef, KeyValueChanges } from '@angular/core';
 import { IonContent } from '@ionic/angular';
-import { ModalOptions, PopoverOptions, AlertOptions, AlertButton, TextFieldTypes, getMode } from '@ionic/core';
+import { ModalOptions, PopoverOptions, AlertOptions, AlertButton, TextFieldTypes, getMode, ToastOptions } from '@ionic/core';
 import { Md5 } from 'ts-md5';
 
 import { CoreApp } from '@services/app';
@@ -53,8 +53,7 @@ import { NavigationStart } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { CoreComponentsRegistry } from '@singletons/components-registry';
-import { CoreEventObserver } from '@singletons/events';
-import { CoreCancellablePromise } from '@classes/cancellable-promise';
+import { CoreDom } from '@singletons/dom';
 
 /*
  * "Utils" service with helper functions for UI, DOM elements and HTML code.
@@ -91,155 +90,6 @@ export class CoreDomUtilsProvider {
         const debugDisplay = await CoreConfig.get<number>(CoreConstants.SETTINGS_DEBUG_DISPLAY, 0);
 
         this.debugDisplay = debugDisplay != 0;
-    }
-
-    /**
-     * Wait an element to be in dom of another element.
-     *
-     * @param element Element to wait.
-     * @return Cancellable promise.
-     */
-    waitToBeInDOM(element: HTMLElement): CoreCancellablePromise<void> {
-        const root = element.getRootNode({ composed: true });
-
-        if (root === document) {
-            // Already in DOM.
-            return CoreCancellablePromise.resolve();
-        }
-
-        let observer: MutationObserver;
-
-        return new CoreCancellablePromise<void>(
-            (resolve) => {
-                observer = new MutationObserver(() => {
-                    const root = element.getRootNode({ composed: true });
-
-                    if (root !== document) {
-                        return;
-                    }
-
-                    observer?.disconnect();
-                    resolve();
-                });
-
-                observer.observe(document.body, { subtree: true, childList: true });
-            },
-            () => {
-                observer?.disconnect();
-            },
-        );
-    }
-
-    /**
-     * Wait an element to be in dom and visible.
-     *
-     * @param element Element to wait.
-     * @return Cancellable promise.
-     */
-    waitToBeVisible(element: HTMLElement): CoreCancellablePromise<void> {
-        const domPromise = CoreDomUtils.waitToBeInDOM(element);
-
-        let interval: number | undefined;
-
-        // Mutations did not observe for visibility properties.
-        return new CoreCancellablePromise<void>(
-            async (resolve) => {
-                await domPromise;
-
-                if (CoreDomUtils.isElementVisible(element)) {
-                    return resolve();
-                }
-
-                interval = window.setInterval(() => {
-                    if (!CoreDomUtils.isElementVisible(element)) {
-                        return;
-                    }
-
-                    resolve();
-                    window.clearInterval(interval);
-                }, 50);
-            },
-            () => {
-                domPromise.cancel();
-                window.clearInterval(interval);
-            },
-        );
-    }
-
-    /**
-     * Wait an element to be in dom and visible.
-     *
-     * @param element Element to wait.
-     * @param intersectionRatio Intersection ratio (From 0 to 1).
-     * @return Cancellable promise.
-     */
-    waitToBeInViewport(element: HTMLElement, intersectionRatio = 1): CoreCancellablePromise<void> {
-        const visiblePromise = CoreDomUtils.waitToBeVisible(element);
-
-        let intersectionObserver: IntersectionObserver;
-        let interval: number | undefined;
-
-        return new CoreCancellablePromise<void>(
-            async (resolve) => {
-                await visiblePromise;
-
-                if (CoreDomUtils.isElementInViewport(element, intersectionRatio)) {
-
-                    return resolve();
-                }
-
-                if ('IntersectionObserver' in window) {
-                    intersectionObserver = new IntersectionObserver((observerEntries) => {
-                        const isIntersecting = observerEntries
-                            .some((entry) => entry.isIntersecting && entry.intersectionRatio >= intersectionRatio);
-                        if (!isIntersecting) {
-                            return;
-                        }
-
-                        resolve();
-                        intersectionObserver?.disconnect();
-                    });
-
-                    intersectionObserver.observe(element);
-                } else {
-                    interval = window.setInterval(() => {
-                        if (!CoreDomUtils.isElementInViewport(element, intersectionRatio)) {
-                            return;
-                        }
-
-                        resolve();
-                        window.clearInterval(interval);
-                    }, 50);
-                }
-            },
-            () => {
-                visiblePromise.cancel();
-                intersectionObserver?.disconnect();
-                window.clearInterval(interval);
-            },
-        );
-    }
-
-    /**
-     * Window resize is widely checked and may have many performance issues, debouce usage is needed to avoid calling it too much.
-     * This function helps setting up the debounce feature and remove listener easily.
-     *
-     * @param resizeFunction Function to execute on resize.
-     * @param debounceDelay Debounce time in ms.
-     * @return Event observer to call off when finished.
-     */
-    onWindowResize(resizeFunction: (ev?: Event) => void, debounceDelay = 20): CoreEventObserver {
-        const resizeListener = CoreUtils.debounce((ev?: Event) => {
-            resizeFunction(ev);
-        }, debounceDelay);
-
-        window.addEventListener('resize', resizeListener);
-
-        return {
-            off: (): void => {
-                window.removeEventListener('resize', resizeListener);
-            },
-        };
     }
 
     /**
@@ -461,15 +311,40 @@ export class CoreDomUtilsProvider {
     /**
      * Focus an element and open keyboard.
      *
-     * @param el HTML element to focus.
+     * @param element HTML element to focus.
      */
-    focusElement(el: HTMLElement): void {
-        if (el?.focus) {
-            el.focus();
-            if (CoreApp.isAndroid() && this.supportsInputKeyboard(el)) {
-                // On some Android versions the keyboard doesn't open automatically.
-                CoreApp.openKeyboard();
+    async focusElement(
+        element: HTMLIonInputElement | HTMLIonTextareaElement | HTMLIonSearchbarElement | HTMLElement,
+    ): Promise<void> {
+        let retries = 10;
+
+        let focusElement = element;
+
+        if ('getInputElement' in focusElement) {
+            // If it's an Ionic element get the right input to use.
+            focusElement.componentOnReady && await focusElement.componentOnReady();
+            focusElement = await focusElement.getInputElement();
+        }
+
+        if (!focusElement || !focusElement.focus) {
+            throw new CoreError('Element to focus cannot be focused');
+        }
+
+        while (retries > 0 && focusElement !== document.activeElement) {
+            focusElement.focus();
+
+            if (focusElement === document.activeElement) {
+                await CoreUtils.nextTick();
+                if (CoreApp.isAndroid() && this.supportsInputKeyboard(focusElement)) {
+                    // On some Android versions the keyboard doesn't open automatically.
+                    CoreApp.openKeyboard();
+                }
+                break;
             }
+
+            // @TODO Probably a Mutation Observer would get this working.
+            await CoreUtils.wait(50);
+            retries--;
         }
     }
 
@@ -507,11 +382,9 @@ export class CoreDomUtilsProvider {
      * @return Selection contents. Undefined if not found.
      */
     getContentsOfElement(element: HTMLElement, selector: string): string | undefined {
-        if (element) {
-            const selected = element.querySelector(selector);
-            if (selected) {
-                return selected.innerHTML;
-            }
+        const selected = element.querySelector(selector);
+        if (selected) {
+            return selected.innerHTML;
         }
     }
 
@@ -656,50 +529,35 @@ export class CoreDomUtilsProvider {
     /**
      * Retrieve the position of a element relative to another element.
      *
-     * @param container Element to search in.
+     * @param element Element to search in.
      * @param selector Selector to find the element to gets the position.
      * @param positionParentClass Parent Class where to stop calculating the position. Default inner-scroll.
      * @return positionLeft, positionTop of the element relative to.
+     * @deprecated since app 4.0. Use CoreDom.getRelativeElementPosition instead.
      */
-    getElementXY(container: HTMLElement, selector: undefined, positionParentClass?: string): number[];
-    getElementXY(container: HTMLElement, selector: string, positionParentClass?: string): number[] | null;
-    getElementXY(container: HTMLElement, selector?: string, positionParentClass?: string): number[] | null {
-        let element: HTMLElement | null = <HTMLElement> (selector ? container.querySelector(selector) : container);
-        let positionTop = 0;
-        let positionLeft = 0;
+    getElementXY(element: HTMLElement, selector?: string, positionParentClass = 'inner-scroll'): [number, number] | null {
+        if (selector) {
+            const foundElement = element.querySelector<HTMLElement>(selector);
+            if (!foundElement) {
+                // Element not found.
+                return null;
+            }
 
-        if (!positionParentClass) {
-            positionParentClass = 'inner-scroll';
+            element = foundElement;
         }
 
-        if (!element) {
+        const parent = element.closest<HTMLElement>(`.${positionParentClass}`);
+        if (!parent) {
             return null;
         }
 
-        while (element) {
-            positionLeft += (element.offsetLeft - element.scrollLeft + element.clientLeft);
-            positionTop += (element.offsetTop - element.scrollTop + element.clientTop);
+        const position = CoreDom.getRelativeElementPosition(element, parent);
 
-            const offsetElement = element.offsetParent;
-            element = element.parentElement;
-
-            // Every parent class has to be checked but the position has to be got form offsetParent.
-            while (offsetElement != element && element) {
-                // If positionParentClass element is reached, stop adding tops.
-                if (element.className.indexOf(positionParentClass) != -1) {
-                    element = null;
-                } else {
-                    element = element.parentElement;
-                }
-            }
-
-            // Finally, check again.
-            if (element?.className.indexOf(positionParentClass) != -1) {
-                element = null;
-            }
-        }
-
-        return [positionLeft, positionTop];
+        // Calculate the top and left positions.
+        return [
+            Math.ceil(position.x),
+            Math.ceil(position.y),
+        ];
     }
 
     /**
@@ -821,7 +679,7 @@ export class CoreDomUtilsProvider {
      *
      * @param findFunction The function used to find the element.
      * @return Resolved if found, rejected if too many tries.
-     * @deprecated since app 4.0 Use waitToBeInDOM instead.
+     * @deprecated since app 4.0 Use CoreDom.waitToBeInsideElement instead.
      */
     waitElementToExist(findFunction: () => HTMLElement | null): Promise<HTMLElement> {
         const promiseInterval = CoreUtils.promiseDefer<HTMLElement>();
@@ -926,63 +784,6 @@ export class CoreDomUtilsProvider {
     }
 
     /**
-     * Check whether an element has been added to the DOM.
-     *
-     * @param element Element.
-     * @return True if element has been added to the DOM, false otherwise.
-     */
-    isElementInDom(element: HTMLElement): boolean {
-        return element.getRootNode({ composed: true }) === document;
-    }
-
-    /**
-     * Check whether an element is visible or not.
-     *
-     * @param element Element.
-     * @return True if element is visible inside the DOM.
-     */
-    isElementVisible(element: HTMLElement): boolean {
-        if (element.clientWidth === 0 || element.clientHeight === 0) {
-            return false;
-        }
-
-        const style = getComputedStyle(element);
-        if (style.opacity === '0' || style.display === 'none' || style.visibility === 'hidden') {
-            return false;
-        }
-
-        return CoreDomUtils.isElementInDom(element);
-    }
-
-    /**
-     * Check whether an element is intersecting the intersectionRatio in viewport.
-     *
-     * @param element
-     * @param intersectionRatio Intersection ratio (From 0 to 1).
-     * @return True if in viewport.
-     */
-    isElementInViewport(element: HTMLElement, intersectionRatio = 1): boolean {
-        const elementRectangle = element.getBoundingClientRect();
-
-        const elementArea = elementRectangle.width * elementRectangle.height;
-        if (elementArea == 0) {
-            return false;
-        }
-
-        const intersectionRectangle = {
-            top: Math.max(0, elementRectangle.top),
-            left: Math.max(0, elementRectangle.left),
-            bottom: Math.min(window.innerHeight, elementRectangle.bottom),
-            right: Math.min(window.innerWidth, elementRectangle.right),
-        };
-
-        const intersectionArea = (intersectionRectangle.right - intersectionRectangle.left) *
-            (intersectionRectangle.bottom - intersectionRectangle.top);
-
-        return intersectionArea / elementArea >= intersectionRatio;
-    }
-
-    /**
      * Check if rich text editor is enabled.
      *
      * @return Promise resolved with boolean: true if enabled, false otherwise.
@@ -1032,11 +833,9 @@ export class CoreDomUtilsProvider {
      * @param selector Selector to search.
      */
     removeElement(element: HTMLElement, selector: string): void {
-        if (element) {
-            const selected = element.querySelector(selector);
-            if (selected) {
-                selected.remove();
-            }
+        const selected = element.querySelector(selector);
+        if (selected) {
+            selected.remove();
         }
     }
 
@@ -1134,9 +933,9 @@ export class CoreDomUtilsProvider {
             }
 
             // Treat video posters.
-            if (media.tagName == 'VIDEO' && media.getAttribute('poster')) {
-                const currentPoster = media.getAttribute('poster');
-                const newPoster = paths[CoreTextUtils.decodeURIComponent(currentPoster!)];
+            const currentPoster = media.getAttribute('poster');
+            if (media.tagName == 'VIDEO' && currentPoster) {
+                const newPoster = paths[CoreTextUtils.decodeURIComponent(currentPoster)];
                 if (newPoster !== undefined) {
                     media.setAttribute('poster', newPoster);
                 }
@@ -1173,8 +972,8 @@ export class CoreDomUtilsProvider {
      * @return Returns a promise which is resolved when the scroll has completed.
      * @deprecated since 3.9.5. Use directly the IonContent class.
      */
-    scrollTo(content: IonContent, x: number, y: number, duration?: number): Promise<void> {
-        return content.scrollToPoint(x, y, duration || 0);
+    scrollTo(content: IonContent, x: number, y: number, duration = 0): Promise<void> {
+        return content.scrollToPoint(x, y, duration);
     }
 
     /**
@@ -1185,7 +984,7 @@ export class CoreDomUtilsProvider {
      * @return Returns a promise which is resolved when the scroll has completed.
      * @deprecated since 3.9.5. Use directly the IonContent class.
      */
-    scrollToBottom(content: IonContent, duration?: number): Promise<void> {
+    scrollToBottom(content: IonContent, duration = 0): Promise<void> {
         return content.scrollToBottom(duration);
     }
 
@@ -1197,7 +996,7 @@ export class CoreDomUtilsProvider {
      * @return Returns a promise which is resolved when the scroll has completed.
      * @deprecated since 3.9.5. Use directly the IonContent class.
      */
-    scrollToTop(content: IonContent, duration?: number): Promise<void> {
+    scrollToTop(content: IonContent, duration = 0): Promise<void> {
         return content.scrollToTop(duration);
     }
 
@@ -1244,7 +1043,7 @@ export class CoreDomUtilsProvider {
             const scrollElement = await content.getScrollElement();
 
             return scrollElement.scrollTop || 0;
-        } catch (error) {
+        } catch {
             return 0;
         }
     }
@@ -1252,19 +1051,15 @@ export class CoreDomUtilsProvider {
     /**
      * Scroll to a certain element.
      *
-     * @param content The content that must be scrolled.
+     * @param content Not used anymore.
      * @param element The element to scroll to.
-     * @param scrollParentClass Parent class where to stop calculating the position. Default inner-scroll.
+     * @param scrollParentClass Not used anymore.
      * @param duration Duration of the scroll animation in milliseconds.
      * @return True if the element is found, false otherwise.
+     * @deprecated since app 4.0 Use CoreDom.scrollToElement instead.
      */
     scrollToElement(content: IonContent, element: HTMLElement, scrollParentClass?: string, duration?: number): boolean {
-        const position = this.getElementXY(element, undefined, scrollParentClass);
-        if (!position) {
-            return false;
-        }
-
-        content.scrollToPoint(position[0], position[1], duration || 0);
+        CoreDom.scrollToElement(element, undefined, { duration });
 
         return true;
     }
@@ -1273,15 +1068,16 @@ export class CoreDomUtilsProvider {
      * Scroll to a certain element using a selector to find it.
      *
      * @param container The element that contains the element that must be scrolled.
-     * @param content The content that must be scrolled.
+     * @param content Not used anymore.
      * @param selector Selector to find the element to scroll to.
-     * @param scrollParentClass Parent class where to stop calculating the position. Default inner-scroll.
+     * @param scrollParentClass Not used anymore.
      * @param duration Duration of the scroll animation in milliseconds.
      * @return True if the element is found, false otherwise.
+     * @deprecated since app 4.0 Use CoreDom.scrollToElement instead.
      */
     scrollToElementBySelector(
         container: HTMLElement | null,
-        content: IonContent | undefined,
+        content: unknown | null,
         selector: string,
         scrollParentClass?: string,
         duration?: number,
@@ -1290,30 +1086,27 @@ export class CoreDomUtilsProvider {
             return false;
         }
 
-        try {
-            const position = this.getElementXY(container, selector, scrollParentClass);
-            if (!position) {
-                return false;
-            }
+        CoreDom.scrollToElement(container, selector, { duration });
 
-            content.scrollToPoint(position[0], position[1], duration || 0);
+        return true;
 
-            return true;
-        } catch {
-            return false;
-        }
     }
 
     /**
      * Search for an input with error (core-input-error directive) and scrolls to it if found.
      *
      * @param container The element that contains the element that must be scrolled.
-     * @param content The content that must be scrolled.
-     * @param scrollParentClass Parent class where to stop calculating the position. Default inner-scroll.
      * @return True if the element is found, false otherwise.
+     * @deprecated since app 4.0 Use CoreDom.scrollToInputError instead.
      */
-    scrollToInputError(container: HTMLElement | null, content?: IonContent, scrollParentClass?: string): boolean {
-        return this.scrollToElementBySelector(container, content, '.core-input-error', scrollParentClass);
+    scrollToInputError(container: HTMLElement | null): boolean {
+        if (!container) {
+            return false;
+        }
+
+        CoreDom.scrollToInputError(container);
+
+        return true;
     }
 
     /**
@@ -1841,6 +1634,24 @@ export class CoreDomUtilsProvider {
     }
 
     /**
+     * Show toast with some options.
+     *
+     * @param options Options.
+     * @return Promise resolved with Toast instance.
+     */
+    async showToastWithOptions(options: ToastOptions): Promise<HTMLIonToastElement> {
+        // Set some default values.
+        options.duration = options.duration ?? 2000;
+        options.position = options.position ?? 'bottom';
+
+        const loader = await ToastController.create(options);
+
+        await loader.present();
+
+        return loader;
+    }
+
+    /**
      * Stores a component/directive instance.
      *
      * @param element The root element of the component/directive.
@@ -2084,7 +1895,7 @@ export class CoreDomUtilsProvider {
     /**
      * Trigger form cancelled event.
      *
-     * @param form Form element.
+     * @param formRef Form element.
      * @param siteId The site affected. If not provided, no site affected.
      * @deprecated since 3.9.5. Function has been moved to CoreForms.
      */
@@ -2095,7 +1906,7 @@ export class CoreDomUtilsProvider {
     /**
      * Trigger form submitted event.
      *
-     * @param form Form element.
+     * @param formRef Form element.
      * @param online Whether the action was done in offline or not.
      * @param siteId The site affected. If not provided, no site affected.
      * @deprecated since 3.9.5. Function has been moved to CoreForms.
@@ -2106,6 +1917,7 @@ export class CoreDomUtilsProvider {
 
     /**
      * In iOS the resize event is triggered before the window size changes. Wait for the size to change.
+     * Use of this function is discouraged. Please use CoreDom.onWindowResize to check window resize event.
      *
      * @param windowWidth Initial window width.
      * @param windowHeight Initial window height.

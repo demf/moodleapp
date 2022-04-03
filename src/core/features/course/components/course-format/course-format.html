@@ -1,3 +1,8 @@
+<core-navbar-buttons slot="end" prepend>
+    <ion-button fill="clear" (click)="gotoCourseDownloads()" [attr.aria-label]="'addon.storagemanager.coursedownloads' | translate">
+        <ion-icon name="fas-cloud-download-alt" slot="icon-only" aria-hidden="true"></ion-icon>
+    </ion-button>
+</core-navbar-buttons>
 <core-dynamic-component [component]="courseFormatComponent" [data]="data">
     <!-- Default course format. -->
     <core-loading [hideUntil]="loaded">
@@ -44,12 +49,13 @@
 </core-dynamic-component>
 
 
-<core-block-side-blocks-button slot="fixed" *ngIf="loaded && course && displayBlocks && hasBlocks" [courseId]="course.id">
+<core-block-side-blocks-button slot="fixed" *ngIf="loaded && course && displayBlocks && hasBlocks" contextLevel="course"
+    [instanceId]="course.id">
 </core-block-side-blocks-button>
 
 <!-- Course Index button. -->
 <ion-fab slot="fixed" core-fab vertical="bottom" horizontal="end" *ngIf="loaded && displayCourseIndex">
-    <ion-fab-button (click)="openCourseIndex()" (onAppear)="showCourseIndexTour()" [attr.aria-label]="'core.course.courseindex' | translate"
+    <ion-fab-button (click)="openCourseIndex()" [userTour]="courseIndexTour" [attr.aria-label]="'core.course.courseindex' | translate"
         color="secondary" #courseIndexFab>
         <ion-icon name="fas-list-ul" aria-hidden="true"></ion-icon>
         <span class="sr-only">{{'core.course.courseindex' | translate }}</span>

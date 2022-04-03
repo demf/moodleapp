@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { ActivatedRoute } from '@angular/router';
-import { AfterViewInit, Component, ElementRef, OnDestroy, Optional } from '@angular/core';
-import { IonContent, IonRefresher } from '@ionic/angular';
+import { AfterViewInit, Component, ElementRef, OnDestroy } from '@angular/core';
+import { IonRefresher } from '@ionic/angular';
 
 import { CoreDomUtils } from '@services/utils/dom';
 import { CoreGrades } from '@features/grades/services/grades';
@@ -31,6 +31,7 @@ import { Translate } from '@singletons';
 import { CoreSwipeNavigationItemsManager } from '@classes/items-management/swipe-navigation-items-manager';
 import { CoreRoutedItemsManagerSourcesTracker } from '@classes/items-management/routed-items-manager-sources-tracker';
 import { CoreGradesCoursesSource } from '@features/grades/classes/grades-courses-source';
+import { CoreDom } from '@singletons/dom';
 
 /**
  * Page that displays a course grades.
@@ -59,7 +60,6 @@ export class CoreGradesCoursePage implements AfterViewInit, OnDestroy {
     constructor(
         protected route: ActivatedRoute,
         protected element: ElementRef<HTMLElement>,
-        @Optional() protected content?: IonContent,
     ) {
         try {
             this.courseId = CoreNavigator.getRequiredRouteNumberParam('courseId', { route });
@@ -170,11 +170,9 @@ export class CoreGradesCoursePage implements AfterViewInit, OnDestroy {
 
                 if (row) {
                     this.toggleRow(row, true);
-                    await CoreUtils.nextTick();
 
-                    CoreDomUtils.scrollToElementBySelector(
+                    CoreDom.scrollToElement(
                         this.element.nativeElement,
-                        this.content,
                         '#grade-' + row.id,
                     );
                     this.gradeId = undefined;

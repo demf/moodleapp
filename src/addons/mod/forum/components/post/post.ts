@@ -20,7 +20,6 @@ import {
     OnChanges,
     OnDestroy,
     OnInit,
-    Optional,
     Output,
     SimpleChange,
     ViewChild,
@@ -41,7 +40,6 @@ import {
 import { CoreTag } from '@features/tag/services/tag';
 import { Translate } from '@singletons';
 import { CoreFileUploader } from '@features/fileuploader/services/fileuploader';
-import { IonContent } from '@ionic/angular';
 import { AddonModForumSync } from '../../services/forum-sync';
 import { CoreSync } from '@services/sync';
 import { CoreTextUtils } from '@services/utils/text';
@@ -53,6 +51,7 @@ import { CoreRatingInfo } from '@features/rating/services/rating';
 import { CoreForms } from '@singletons/form';
 import { CoreFileEntry } from '@services/file-helper';
 import { AddonModForumSharedPostFormData } from '../../pages/discussion/discussion.page';
+import { CoreDom } from '@singletons/dom';
 
 /**
  * Components that shows a discussion post, its attachments and the action buttons allowed (reply, etc.).
@@ -94,7 +93,6 @@ export class AddonModForumPostComponent implements OnInit, OnDestroy, OnChanges 
 
     constructor(
         protected elementRef: ElementRef,
-        @Optional() protected content?: IonContent,
     ) {}
 
     get showForm(): boolean {
@@ -308,8 +306,8 @@ export class AddonModForumPostComponent implements OnInit, OnDestroy, OnChanges 
                 this.post.id > 0 ? this.post.id : undefined,
             );
 
-            this.scrollToForm(5);
-        } catch (error) {
+            this.scrollToForm();
+        } catch {
             // Cancelled.
         }
     }
@@ -540,19 +538,11 @@ export class AddonModForumPostComponent implements OnInit, OnDestroy, OnChanges 
     /**
      * Scroll to reply/edit form.
      *
-     * @param ticksToWait Number of ticks to wait before scrolling.
      * @return Promise resolved when done.
      */
-    protected async scrollToForm(ticksToWait = 1): Promise<void> {
-        if (!this.content) {
-            return;
-        }
-
-        await CoreUtils.nextTicks(ticksToWait);
-
-        CoreDomUtils.scrollToElementBySelector(
+    protected async scrollToForm(): Promise<void> {
+        await CoreDom.scrollToElement(
             this.elementRef.nativeElement,
-            this.content,
             '#addon-forum-reply-edit-form-' + this.uniqueId,
         );
     }

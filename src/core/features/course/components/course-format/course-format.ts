@@ -34,6 +34,7 @@ import {
     CoreCourseProvider,
 } from '@features/course/services/course';
 import {
+    CoreCourseHelper,
     CoreCourseSection,
 } from '@features/course/services/course-helper';
 import { CoreCourseFormatDelegate } from '@features/course/services/format-delegate';
@@ -45,8 +46,10 @@ import { CoreBlockHelper } from '@features/block/services/block-helper';
 import { CoreNavigator } from '@services/navigator';
 import { CoreCourseModuleDelegate } from '@features/course/services/module-delegate';
 import { CoreCourseViewedModulesDBRecord } from '@features/course/services/database/course';
-import { CoreUserTours, CoreUserToursAlignment, CoreUserToursSide } from '@features/usertours/services/user-tours';
+import { CoreUserToursAlignment, CoreUserToursSide } from '@features/usertours/services/user-tours';
 import { CoreCourseCourseIndexTourComponent } from '../course-index-tour/course-index-tour';
+import { CoreDom } from '@singletons/dom';
+import { CoreUserTourDirectiveOptions } from '@directives/user-tour';
 
 /**
  * Component to display course contents using a certain format. If the format isn't found, use default one.
@@ -85,6 +88,13 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
     canLoadMore = false;
     showSectionId = 0;
     data: Record<string, unknown> = {}; // Data to pass to the components.
+    courseIndexTour: CoreUserTourDirectiveOptions = {
+        id: 'course-index',
+        component: CoreCourseCourseIndexTourComponent,
+        side: CoreUserToursSide.Top,
+        alignment: CoreUserToursAlignment.End,
+        getFocusedElement: nativeButton => nativeButton.shadowRoot?.children[0] as HTMLElement,
+    };
 
     displayCourseIndex = false;
     displayBlocks = false;
@@ -161,25 +171,6 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
                     }
                 }
             }
-        });
-    }
-
-    /**
-     * Show Course Index User Tour.
-     */
-    async showCourseIndexTour(): Promise<void> {
-        const nativeButton = this.courseIndexFab?.nativeElement.shadowRoot?.children[0] as HTMLElement;
-
-        if (!nativeButton) {
-            return;
-        }
-
-        await CoreUserTours.showIfPending({
-            id: 'course-index',
-            component: CoreCourseCourseIndexTourComponent,
-            focus: nativeButton,
-            side: CoreUserToursSide.Top,
-            alignment: CoreUserToursAlignment.End,
         });
     }
 
@@ -390,28 +381,37 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     /**
+     * Get selected section ID. If viewing all sections, use current scrolled section.
+     *
+     * @return Section ID, undefined if not found.
+     */
+    protected async getSelectedSectionId(): Promise<number | undefined> {
+        if (this.selectedSection?.id !== this.allSectionsId) {
+            return this.selectedSection?.id;
+        }
+
+        // Check current scrolled section.
+        const allSectionElements: NodeListOf<HTMLElement> =
+            this.elementRef.nativeElement.querySelectorAll('section.core-course-module-list-wrapper');
+
+        const scroll = await this.content.getScrollElement();
+        const containerTop = scroll.getBoundingClientRect().top;
+
+        const element = Array.from(allSectionElements).find((element) => {
+            const position = element.getBoundingClientRect();
+
+            // The bottom is inside the container or lower.
+            return position.bottom >= containerTop;
+        });
+
+        return Number(element?.getAttribute('id')) || undefined;
+    }
+
+    /**
      * Display the course index modal.
      */
     async openCourseIndex(): Promise<void> {
-        let selectedId = this.selectedSection?.id;
-
-        if (selectedId == this.allSectionsId) {
-            // Check current scrolled section.
-            const allSectionElements: NodeListOf<HTMLElement> =
-                this.elementRef.nativeElement.querySelectorAll('section.section-wrapper');
-
-            const scroll = await this.content.getScrollElement();
-            const containerTop = scroll.getBoundingClientRect().top;
-
-            const element = Array.from(allSectionElements).find((element) => {
-                const position = element.getBoundingClientRect();
-
-                // The bottom is inside the container or lower.
-                return position.bottom >= containerTop;
-            });
-
-            selectedId = Number(element?.getAttribute('id')) || undefined;
-        }
+        const selectedId = await this.getSelectedSectionId();
 
         const data = await CoreDomUtils.openModal<CoreCourseIndexSectionWithModule>({
             component: CoreCourseCourseIndexComponent,
@@ -444,11 +444,28 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
                             await CoreCourseModuleDelegate.getModuleDataFor(module.modname, module, this.course.id);
         }
 
-        if (module.uservisible !== false && module.handlerData?.action) {
+        if (CoreCourseHelper.canUserViewModule(module, section) && module.handlerData?.action) {
             module.handlerData.action(data.event, module, module.course);
         }
 
         this.moduleId = data.moduleId;
+    }
+
+    /**
+     * Open course downloads page.
+     */
+    async gotoCourseDownloads(): Promise<void> {
+        const selectedId = await this.getSelectedSectionId();
+
+        CoreNavigator.navigateToSitePath(
+            `storage/${this.course.id}`,
+            {
+                params: {
+                    title: this.course.fullname,
+                    sectionId: selectedId,
+                },
+            },
+        );
     }
 
     /**
@@ -491,9 +508,7 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
         // Scroll to module if needed. Give more priority to the input.
         const moduleIdToScroll = this.moduleId && previousValue === undefined ? this.moduleId : moduleId;
         if (moduleIdToScroll) {
-            setTimeout(() => {
-                this.scrollToModule(moduleIdToScroll);
-            }, 200);
+            this.scrollToModule(moduleIdToScroll);
         } else {
             this.content.scrollToTop(0);
         }
@@ -512,10 +527,10 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
      * @param moduleId Module ID.
      */
     protected scrollToModule(moduleId: number): void {
-        CoreDomUtils.scrollToElementBySelector(
+        CoreDom.scrollToElement(
             this.elementRef.nativeElement,
-            this.content,
             '#core-course-module-' + moduleId,
+            { addYAxis: -10 },
         );
     }
 
@@ -574,7 +589,8 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
                 continue;
             }
 
-            modulesLoaded += sections[i].modules.reduce((total, module) => module.visibleoncoursepage !== 0 ? total + 1 : total, 0);
+            modulesLoaded += sections[i].modules.reduce((total, module) =>
+                !CoreCourseHelper.isModuleStealth(module, sections[i]) ? total + 1 : total, 0);
 
             if (modulesLoaded >= CoreCourseFormatComponent.LOAD_MORE_ACTIVITIES) {
                 break;
@@ -632,8 +648,7 @@ export class CoreCourseFormatComponent implements OnInit, OnChanges, OnDestroy {
      * @return Whether the section can be viewed.
      */
     canViewSection(section: CoreCourseSection): boolean {
-        return section.uservisible !== false && !section.hiddenbynumsections &&
-                section.id != CoreCourseProvider.STEALTH_MODULES_SECTION_ID;
+        return CoreCourseHelper.canUserViewSection(section) && !CoreCourseHelper.isSectionStealth(section);
     }
 
 }

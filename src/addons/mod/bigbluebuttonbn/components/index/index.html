@@ -6,7 +6,7 @@
 </core-navbar-buttons>
 
 <!-- Content. -->
-<core-loading [hideUntil]="!showLoading" class="safe-area-page list-item-limited-width">
+<core-loading [hideUntil]="!showLoading">
 
     <!-- Activity info. -->
     <core-course-module-info [module]="module" [description]="description" [component]="component" [componentId]="componentId"
@@ -23,8 +23,8 @@
 
         <ion-item class="ion-text-wrap core-group-selector">
             <ion-label id="addon-bigbluebuttonbn-groupslabel">
-                <ng-container *ngIf="groupInfo.separateGroups">{{'core.groupsseparate' | translate }}</ng-container>
-                <ng-container *ngIf="groupInfo.visibleGroups">{{'core.groupsvisible' | translate }}</ng-container>
+                <ng-container *ngIf="groupInfo.separateGroups">{{ 'core.groupsseparate' | translate }}</ng-container>
+                <ng-container *ngIf="groupInfo.visibleGroups">{{ 'core.groupsvisible' | translate }}</ng-container>
             </ion-label>
             <ion-select [(ngModel)]="groupId" (ionChange)="groupChanged()" aria-labelledby="addon-bigbluebuttonbn-groupslabel"
                 interface="action-sheet" [interfaceOptions]="{header: 'core.group' | translate}">

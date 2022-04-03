@@ -33,7 +33,7 @@ import { CoreError } from '@classes/errors/error';
 import { CoreWSFile, CoreWSExternalWarning } from '@services/ws';
 import { CHECK_UPDATES_TIMES_TABLE, CoreCourseCheckUpdatesDBRecord } from './database/module-prefetch';
 import { CoreFileSizeSum } from '@services/plugin-file-delegate';
-import { CoreCourseModuleData } from './course-helper';
+import { CoreCourseHelper, CoreCourseModuleData } from './course-helper';
 
 const ROOT_CACHE_KEY = 'mmCourse:';
 
@@ -482,23 +482,17 @@ export class CoreCourseModulePrefetchDelegateService extends CoreDelegate<CoreCo
      * @return Promise resolved with the total size (0 if unknown)
      */
     async getModuleStoredSize(module: CoreCourseAnyModuleData, courseId: number): Promise<number> {
-        let downloadedSize = await this.getModuleDownloadedSize(module, courseId);
-
-        if (isNaN(downloadedSize)) {
-            downloadedSize = 0;
-        }
-
         const site = CoreSites.getCurrentSite();
         const handler = this.getPrefetchHandlerFor(module.modname);
-        if (!handler || !site) {
-            // If there is no handler then we can't find out the component name.
-            // We can't work out the cached size, so just return downloaded size.
-            return downloadedSize;
-        }
 
-        const cachedSize = await site.getComponentCacheSize(handler.component, module.id);
+        const [downloadedSize, cachedSize] = await Promise.all([
+            this.getModuleDownloadedSize(module, courseId),
+            handler && site ? site.getComponentCacheSize(handler.component, module.id) : 0,
+        ]);
 
-        return cachedSize + downloadedSize;
+        const totalSize = cachedSize + downloadedSize;
+
+        return isNaN(totalSize) ? 0 : totalSize;
     }
 
     /**
@@ -956,7 +950,7 @@ export class CoreCourseModulePrefetchDelegateService extends CoreDelegate<CoreCo
      * @return Promise resolved with true if downloadable, false otherwise.
      */
     async isModuleDownloadable(module: CoreCourseAnyModuleData, courseId: number): Promise<boolean> {
-        if ('uservisible' in module && module.uservisible === false) {
+        if ('uservisible' in module && !CoreCourseHelper.canUserViewModule(module)) {
             // Module isn't visible by the user, cannot be downloaded.
             return false;
         }

@@ -21,6 +21,7 @@ import { CoreUserTours, CoreUserToursAlignment, CoreUserToursSide } from '@featu
 import { CoreDomUtils } from '@services/utils/dom';
 import { AngularFrameworkDelegate } from '@singletons';
 import { CoreComponentsRegistry } from '@singletons/components-registry';
+import { CoreDom } from '@singletons/dom';
 
 const ANIMATION_DURATION = 200;
 const USER_TOURS_BACK_BUTTON_PRIORITY = 100;
@@ -54,6 +55,7 @@ export class CoreUserToursUserTourComponent implements AfterViewInit {
     popoverWrapperStyles?: string;
     popoverWrapperArrowStyles?: string;
     private element: HTMLElement;
+    private tour?: HTMLElement;
     private wrapperTransform = '';
     private wrapperElement = new CorePromisedValue<HTMLElement>();
     private backButtonListener?: (event: BackButtonEvent) => void;
@@ -76,17 +78,21 @@ export class CoreUserToursUserTourComponent implements AfterViewInit {
     }
 
     /**
-     * Present User Tour.
+     * Show User Tour.
      */
-    async present(): Promise<void> {
+    async show(): Promise<void> {
         // Insert tour component and wait until it's ready.
         const wrapper = await this.wrapperElement;
-        const tour = await AngularFrameworkDelegate.attachViewToDom(wrapper, this.component, this.componentProps ?? {});
+        this.tour = await AngularFrameworkDelegate.attachViewToDom(wrapper, this.component, this.componentProps ?? {});
 
-        await CoreDomUtils.waitForImages(tour);
+        if (!this.tour) {
+            return;
+        }
+
+        await CoreDomUtils.waitForImages(this.tour);
 
         // Calculate focus styles or dismiss if the element is gone.
-        if (this.focus && !CoreDomUtils.isElementVisible(this.focus)) {
+        if (this.focus && !CoreDom.isElementVisible(this.focus)) {
             await this.dismiss(false);
 
             return;
@@ -111,6 +117,19 @@ export class CoreUserToursUserTourComponent implements AfterViewInit {
     }
 
     /**
+     * Hide User Tour temporarily.
+     */
+    async hide(): Promise<void> {
+        const wrapper = await this.wrapperElement;
+
+        await this.playLeaveAnimation();
+        await AngularFrameworkDelegate.removeViewFromDom(wrapper, this.tour);
+
+        this.active = false;
+        this.backButtonListener && document.removeEventListener('ionBackButton', this.backButtonListener);
+    }
+
+    /**
      * Dismiss User Tour.
      *
      * @param acknowledge Whether to confirm that the user has seen the User Tour.
@@ -118,13 +137,15 @@ export class CoreUserToursUserTourComponent implements AfterViewInit {
     async dismiss(acknowledge: boolean = true): Promise<void> {
         this.beforeDismiss.emit();
 
-        await this.playLeaveAnimation();
-        await Promise.all<unknown>([
-            AngularFrameworkDelegate.removeViewFromDom(this.container, this.element),
-            acknowledge && CoreUserTours.acknowledge(this.id),
-        ]);
+        if (this.active) {
+            await this.playLeaveAnimation();
+            await AngularFrameworkDelegate.removeViewFromDom(this.container, this.element);
 
-        this.backButtonListener && document.removeEventListener('ionBackButton', this.backButtonListener);
+            this.backButtonListener && document.removeEventListener('ionBackButton', this.backButtonListener);
+        }
+
+        acknowledge && await CoreUserTours.acknowledge(this.id);
+
         this.afterDismiss.emit();
     }
 

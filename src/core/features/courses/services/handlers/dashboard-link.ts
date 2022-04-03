@@ -15,18 +15,19 @@
 import { Injectable } from '@angular/core';
 import { CoreContentLinksHandlerBase } from '@features/contentlinks/classes/base-handler';
 import { CoreContentLinksAction } from '@features/contentlinks/services/contentlinks-delegate';
+import { CoreMainMenuHomeHandlerService } from '@features/mainmenu/services/handlers/mainmenu';
 import { CoreNavigator } from '@services/navigator';
 import { makeSingleton } from '@singletons';
 import { CoreDashboardHomeHandler, CoreDashboardHomeHandlerService } from './dashboard-home';
 
 /**
- * Handler to treat links to my overview.
+ * Handler to treat links to dashboard.
  */
 @Injectable({ providedIn: 'root' })
 export class CoreCoursesDashboardLinkHandlerService extends CoreContentLinksHandlerBase {
 
-    name = 'CoreCoursesMyOverviewLinkHandler';
-    pattern = /\/my\/?$/;
+    name = 'CoreCoursesDashboardLinkHandler';
+    pattern = /^\/my\/?$/;
 
     /**
      * Get the list of actions for a link (url).
@@ -37,7 +38,13 @@ export class CoreCoursesDashboardLinkHandlerService extends CoreContentLinksHand
         return [{
             action: (siteId): void => {
                 // Use redirect to select the tab.
-                CoreNavigator.navigateToSitePath(CoreDashboardHomeHandlerService.PAGE_NAME, { siteId });
+                CoreNavigator.navigateToSitePath(
+                    `/${CoreMainMenuHomeHandlerService.PAGE_NAME}/${CoreDashboardHomeHandlerService.PAGE_NAME}`,
+                    {
+                        siteId,
+                        preferCurrentTab: false,
+                    },
+                );
             },
         }];
     }
