@@ -45,6 +45,7 @@ import { CoreCollapsibleItemDirective } from './collapsible-item';
 import { CoreCancellablePromise } from '@classes/cancellable-promise';
 import { AsyncComponent } from '@classes/async-component';
 import { CoreText } from '@singletons/text';
+import { CoreDom } from '@singletons/dom';
 
 /**
  * Directive to format text rendered. It renders the HTML and treats all links and media, using CoreLinkDirective
@@ -255,7 +256,8 @@ export class CoreFormatTextDirective implements OnChanges, OnDestroy, AsyncCompo
             button.classList.add('hidden');
             button.setAttribute('aria-label', label);
             // Add an ion-icon item to apply the right styles, but the ion-icon component won't be executed.
-            button.innerHTML = '<ion-icon name="fas-search" aria-hidden="true" src="assets/fonts/font-awesome/solid/search.svg">\
+            button.innerHTML = '<ion-icon name="fas-expand-alt" aria-hidden="true" \
+                src="assets/fonts/font-awesome/solid/expand-alt.svg">\
             </ion-icon>';
 
             button.addEventListener('click', (e: Event) => {
@@ -552,7 +554,7 @@ export class CoreFormatTextDirective implements OnChanges, OnDestroy, AsyncCompo
      */
     protected async getElementWidth(): Promise<number> {
         if (!this.domElementPromise) {
-            this.domElementPromise = CoreDomUtils.waitToBeInDOM(this.element);
+            this.domElementPromise = CoreDom.waitToBeInDOM(this.element);
         }
         await this.domElementPromise;
 
@@ -704,7 +706,7 @@ export class CoreFormatTextDirective implements OnChanges, OnDestroy, AsyncCompo
                     newUrl += `&h=${privacyHash}`;
                 }
 
-                const domPromise = CoreDomUtils.waitToBeInDOM(iframe);
+                const domPromise = CoreDom.waitToBeInDOM(iframe);
                 this.domPromises.push(domPromise);
 
                 await domPromise;

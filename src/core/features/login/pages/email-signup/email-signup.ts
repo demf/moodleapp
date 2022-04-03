@@ -14,7 +14,7 @@
 
 import { Component, ViewChild, ElementRef, OnInit, ChangeDetectorRef } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
-import { IonContent, IonRefresher } from '@ionic/angular';
+import { IonRefresher } from '@ionic/angular';
 
 import { CoreSites } from '@services/sites';
 import { CoreDomUtils } from '@services/utils/dom';
@@ -35,6 +35,7 @@ import { CoreNavigator } from '@services/navigator';
 import { CoreForms } from '@singletons/form';
 import { CoreRecaptchaComponent } from '@components/recaptcha/recaptcha';
 import { CoreText } from '@singletons/text';
+import { CoreDom } from '@singletons/dom';
 
 /**
  * Page to signup using email.
@@ -46,7 +47,6 @@ import { CoreText } from '@singletons/text';
 })
 export class CoreLoginEmailSignupPage implements OnInit {
 
-    @ViewChild(IonContent) content?: IonContent;
     @ViewChild(CoreRecaptchaComponent) recaptchaComponent?: CoreRecaptchaComponent;
     @ViewChild('ageForm') ageFormElement?: ElementRef;
     @ViewChild('signupFormEl') signupFormElement?: ElementRef;
@@ -285,9 +285,8 @@ export class CoreLoginEmailSignupPage implements OnInit {
             this.changeDetector.detectChanges();
 
             // Scroll to the first element with errors.
-            const errorFound = CoreDomUtils.scrollToInputError(
+            const errorFound = await CoreDom.scrollToInputError(
                 this.elementRef.nativeElement,
-                this.content,
             );
 
             if (!errorFound) {

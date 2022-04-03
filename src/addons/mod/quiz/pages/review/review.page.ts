@@ -19,9 +19,10 @@ import { CoreQuestionHelper } from '@features/question/services/question-helper'
 import { IonContent, IonRefresher } from '@ionic/angular';
 import { CoreNavigator } from '@services/navigator';
 import { CoreDomUtils } from '@services/utils/dom';
-import { CoreTimeUtils } from '@services/utils/time';
 import { CoreUtils } from '@services/utils/utils';
 import { Translate } from '@singletons';
+import { CoreDom } from '@singletons/dom';
+import { CoreTime } from '@singletons/time';
 import {
     AddonModQuizNavigationModalComponent,
     AddonModQuizNavigationModalReturn,
@@ -133,10 +134,8 @@ export class AddonModQuizReviewPage implements OnInit {
             this.loaded = true;
 
             if (slot !== undefined) {
-                // Scroll to the question. Give some time to the questions to render.
-                setTimeout(() => {
-                    this.scrollToQuestion(slot);
-                }, 2000);
+                // Scroll to the question.
+                this.scrollToQuestion(slot);
             }
         }
     }
@@ -249,9 +248,8 @@ export class AddonModQuizReviewPage implements OnInit {
      * @param slot Slot of the question to scroll to.
      */
     protected scrollToQuestion(slot: number): void {
-        CoreDomUtils.scrollToElementBySelector(
+        CoreDom.scrollToElement(
             this.elementRef.nativeElement,
-            this.content,
             `#addon-mod_quiz-question-${slot}`,
         );
     }
@@ -278,11 +276,11 @@ export class AddonModQuizReviewPage implements OnInit {
         const timeTaken = (this.attempt.timefinish || 0) - (this.attempt.timestart || 0);
         if (timeTaken > 0) {
             // Format time taken.
-            this.timeTaken = CoreTimeUtils.formatTime(timeTaken);
+            this.timeTaken = CoreTime.formatTime(timeTaken);
 
             // Calculate overdue time.
             if (this.quiz.timelimit && timeTaken > this.quiz.timelimit + 60) {
-                this.overTime = CoreTimeUtils.formatTime(timeTaken - this.quiz.timelimit);
+                this.overTime = CoreTime.formatTime(timeTaken - this.quiz.timelimit);
             }
         } else {
             this.timeTaken = undefined;

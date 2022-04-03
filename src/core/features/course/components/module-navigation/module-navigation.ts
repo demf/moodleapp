@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
-import { CoreCourse, CoreCourseProvider, CoreCourseWSSection } from '@features/course/services/course';
-import { CoreCourseModuleData } from '@features/course/services/course-helper';
+import { Component, ElementRef, Input, OnDestroy, OnInit } from '@angular/core';
+import { CoreCourse, CoreCourseWSSection } from '@features/course/services/course';
+import { CoreCourseHelper, CoreCourseModuleData } from '@features/course/services/course-helper';
 import { CoreCourseModuleDelegate } from '@features/course/services/module-delegate';
 import { IonContent } from '@ionic/angular';
 import { CoreNavigationOptions, CoreNavigator } from '@services/navigator';
@@ -44,11 +44,13 @@ export class CoreCourseModuleNavigationComponent implements OnInit, OnDestroy {
     nextModuleSection?: CoreCourseWSSection;
     previousModuleSection?: CoreCourseWSSection;
     loaded = false;
+    element: HTMLElement;
 
     protected completionObserver: CoreEventObserver;
 
-    constructor(protected ionContent: IonContent) {
+    constructor(protected ionContent: IonContent, element: ElementRef) {
         const siteId = CoreSites.getCurrentSiteId();
+        this.element = element.nativeElement;
 
         this.completionObserver = CoreEvents.on(CoreEvents.COMPLETION_MODULE_VIEWED, async (data) => {
             if (data && data.courseId == this.courseId) {
@@ -168,6 +170,8 @@ export class CoreCourseModuleNavigationComponent implements OnInit, OnDestroy {
                 }
             }
         }
+
+        this.element.classList.toggle('empty', !this.nextModule && !this.previousModule);
     }
 
     /**
@@ -177,7 +181,7 @@ export class CoreCourseModuleNavigationComponent implements OnInit, OnDestroy {
      * @return Wether the module is available to the user or not.
      */
     protected async isModuleAvailable(module: CoreCourseModuleData): Promise<boolean> {
-        return CoreCourse.instance.moduleHasView(module);
+        return !CoreCourseHelper.isModuleStealth(module) && CoreCourse.instance.moduleHasView(module);
     }
 
     /**
@@ -187,7 +191,7 @@ export class CoreCourseModuleNavigationComponent implements OnInit, OnDestroy {
      * @return Wether the module is available to the user or not.
      */
     protected isSectionAvailable(section: CoreCourseWSSection): boolean {
-        return section.uservisible !== false && section.id != CoreCourseProvider.STEALTH_MODULES_SECTION_ID;
+        return CoreCourseHelper.canUserViewSection(section) && !CoreCourseHelper.isSectionStealth(section);
     }
 
     /**
@@ -211,7 +215,7 @@ export class CoreCourseModuleNavigationComponent implements OnInit, OnDestroy {
         if (!module) {
             // It seems the module was hidden. Show a message.
             CoreDomUtils.instance.showErrorModal(
-                next ? 'core.course.gotonextactivitynotfound' : 'core.course.gotopreviousactivitynotfound',
+                next ? 'core.course.nextactivitynotfound' : 'core.course.previousactivitynotfound',
                 true,
             );
 
@@ -223,7 +227,7 @@ export class CoreCourseModuleNavigationComponent implements OnInit, OnDestroy {
             animationDirection: next ? 'forward' : 'back',
         };
 
-        if (module.uservisible === false) {
+        if (!CoreCourseHelper.canUserViewModule(module)) {
             const section = next ? this.nextModuleSection : this.previousModuleSection;
             options.params = {
                 module,

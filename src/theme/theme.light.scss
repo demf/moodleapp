@@ -61,6 +61,7 @@
     --huge-radius: 24px;
 
     --text-color:       #{$text-color};
+    --text-size:        14px;
     --background-color: #{$background-color};
     --stroke:            var(--gray-300);
 
@@ -151,6 +152,8 @@
     --core-header-toolbar-color: var(--text-color);
     --core-header-toolbar-height: 48px;
     --core-header-shadow: none;
+    --core-header-buttons-background: var(--core-header-toolbar-background);
+    --core-header-buttons-color: var(--core-header-toolbar-color);
 
     ion-header {
         box-shadow: var(--core-header-shadow, none);
@@ -190,23 +193,16 @@
     --ion-searchbar-background: var(--ion-background-color);
     --ion-searchbar-border-color: var(--core-input-stroke);
     --ion-searchbar-border-radius: var(--core-input-radius);
+    --ion-searchbar-height: var(--a11y-min-target-size);
     --ion-searchbar-color: var(--text-color);
     --ion-searchbar-icon-color: var(--core-input-stroke);
     ion-searchbar {
         --background: var(--ion-searchbar-background);
         --border-color: var(--ion-searchbar-border-color);
+        --color: var(--ion-searchbar-color);
+        --border-radius: var(--ion-searchbar-border-radius);
         --icon-color: var(--ion-searchbar-icon-color);
-
-        .searchbar-input-container {
-            color: var(--ion-searchbar-color) !important;
-        }
-        .searchbar-input {
-            height: var(--a11y-min-target-size);
-            border: 1px solid var(--ion-searchbar-border-color);
-            box-shadow: none;
-            border-radius: var(--ion-searchbar-border-radius);
-            background: var(--ion-searchbar-background) !important;
-        }
+        --height: var(--ion-searchbar-height);
     }
 
     --core-search-box-background: var(--ion-background-color);
@@ -238,6 +234,12 @@
         .action-sheet-cancel {
             --button-color: var(--danger);
         }
+    }
+
+    ion-toast {
+        --color: var(--ion-color-step-50);
+        --button-color: var(--primary);
+        --background: var(--ion-color-step-800);
     }
 
     --core-tabs-background: var(--white);
@@ -302,10 +304,8 @@
         --min-height: var(--item-divider-min-height);
     }
 
-    --spacer-background: var(--light);
-    core-spacer {
-        --item-divider-background: var(--spacer-background);
-    }
+    --spacer-vertical: 8px;
+    --spacer-color: var(--gray-300);
 
     ion-note {
         --color: var(--subdued-text-color);

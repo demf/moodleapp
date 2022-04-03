@@ -20,7 +20,6 @@ import {
     ViewChild,
     ElementRef,
     OnInit,
-    AfterContentInit,
     OnDestroy,
     Optional,
     AfterViewInit,
@@ -42,6 +41,7 @@ import { CoreComponentsRegistry } from '@singletons/components-registry';
 import { CoreLoadingComponent } from '@components/loading/loading';
 import { CoreScreen } from '@services/screen';
 import { CoreCancellablePromise } from '@classes/cancellable-promise';
+import { CoreDom } from '@singletons/dom';
 
 /**
  * Component to display a rich text editor if enabled.
@@ -56,7 +56,7 @@ import { CoreCancellablePromise } from '@classes/cancellable-promise';
     templateUrl: 'core-editor-rich-text-editor.html',
     styleUrls: ['rich-text-editor.scss'],
 })
-export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentInit, AfterViewInit, OnDestroy {
+export class CoreEditorRichTextEditorComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Based on: https://github.com/judgewest2000/Ionic3RichText/
     // @todo: Anchor button, fullscreen...
@@ -149,7 +149,7 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
     }
 
     /**
-     * Component being initialized.
+     * @inheritdoc
      */
     ngOnInit(): void {
         this.canScanQR = CoreUtils.canScanQR();
@@ -159,9 +159,9 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
     }
 
     /**
-     * Init editor.
+     * @inheritdoc
      */
-    async ngAfterContentInit(): Promise<void> {
+    async ngAfterViewInit(): Promise<void> {
         this.rteEnabled = await CoreDomUtils.isRichTextEditorEnabled();
 
         await this.waitLoadingsDone();
@@ -202,20 +202,25 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
 
             this.deleteDraftOnSubmitOrCancel();
         }
-    }
 
-    /**
-     * @inheritdoc
-     */
-    async ngAfterViewInit(): Promise<void> {
-        const label = this.element.closest('ion-item')?.querySelector('ion-label');
+        const ionItem = this.element.closest<HTMLIonItemElement>('ion-item');
+        if (!ionItem) {
+            return;
+        }
+        ionItem.classList.add('item-rte');
+
+        const label = ionItem.querySelector('ion-label');
 
         if (!label) {
             return;
         }
 
-        this.labelObserver = new MutationObserver(() => this.ariaLabelledBy = label.getAttribute('id') ?? undefined);
+        const updateArialabelledBy = () => this.ariaLabelledBy = label.getAttribute('id') ?? undefined;
+
+        this.labelObserver = new MutationObserver(updateArialabelledBy);
         this.labelObserver.observe(label, { attributes: true, attributeFilter: ['id'] });
+
+        updateArialabelledBy();
     }
 
     /**
@@ -249,7 +254,7 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
             );
         });
 
-        this.resizeListener = CoreDomUtils.onWindowResize(() => {
+        this.resizeListener = CoreDom.onWindowResize(() => {
             this.windowResized();
         }, 50);
 
@@ -290,7 +295,7 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
      * @return Promise resolved when loadings are done.
      */
     protected async waitLoadingsDone(): Promise<void> {
-        this.domPromise = CoreDomUtils.waitToBeInDOM(this.element);
+        this.domPromise = CoreDom.waitToBeInDOM(this.element);
 
         await this.domPromise;
 
@@ -773,7 +778,7 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
      * @param event Event.
      */
     stopBubble(event: Event): void {
-        if (event.type != 'touchend' &&event.type != 'mouseup' && event.type != 'keyup') {
+        if (event.type != 'touchend' && event.type != 'mouseup' && event.type != 'keyup') {
             event.preventDefault();
         }
         event.stopPropagation();
@@ -846,7 +851,7 @@ export class CoreEditorRichTextEditorComponent implements OnInit, AfterContentIn
 
         // Cancel previous one, if any.
         this.buttonsDomPromise?.cancel();
-        this.buttonsDomPromise = CoreDomUtils.waitToBeInDOM(this.toolbar.nativeElement);
+        this.buttonsDomPromise = CoreDom.waitToBeInDOM(this.toolbar.nativeElement);
         await this.buttonsDomPromise;
 
         const width = this.toolbar.nativeElement.getBoundingClientRect().width;

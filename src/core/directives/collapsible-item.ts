@@ -15,10 +15,14 @@
 import { Directive, ElementRef, Input, OnDestroy, OnInit } from '@angular/core';
 import { CoreCancellablePromise } from '@classes/cancellable-promise';
 import { CoreLoadingComponent } from '@components/loading/loading';
-import { CoreDomUtils } from '@services/utils/dom';
+import { CoreSettingsHelper } from '@features/settings/services/settings-helper';
+import { CoreUtils } from '@services/utils/utils';
 import { Translate } from '@singletons';
+import { CoreColors } from '@singletons/colors';
 import { CoreComponentsRegistry } from '@singletons/components-registry';
+import { CoreDom } from '@singletons/dom';
 import { CoreEventObserver } from '@singletons/events';
+import { Subscription } from 'rxjs';
 import { CoreFormatTextDirective } from './format-text';
 
 const defaultMaxHeight = 80;
@@ -49,12 +53,20 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
     protected maxHeight = defaultMaxHeight;
     protected expandedHeight = 0;
     protected resizeListener?: CoreEventObserver;
+    protected darkModeListener?: Subscription;
     protected domPromise?: CoreCancellablePromise<void>;
+    protected visiblePromise?: CoreCancellablePromise<void>;
+    protected uniqueId: string;
+    protected loadingHeight = false;
+    protected pageDidEnterListener?: EventListener;
+    protected page?: HTMLElement;
 
     constructor(el: ElementRef<HTMLElement>) {
         this.element = el.nativeElement;
 
         this.element.addEventListener('click', this.elementClicked.bind(this));
+        this.uniqueId = 'collapsible-item-' + CoreUtils.getUniqueId('CoreCollapsibleItemDirective');
+        this.element.id = this.uniqueId;
     }
 
     /**
@@ -85,9 +97,20 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
 
         await this.calculateHeight();
 
-        this.resizeListener = CoreDomUtils.onWindowResize(() => {
+        this.page?.addEventListener(
+            'ionViewDidEnter',
+            this.pageDidEnterListener = () => {
+                this.calculateHeight();
+            },
+        );
+
+        this.resizeListener = CoreDom.onWindowResize(() => {
             this.calculateHeight();
         }, 50);
+
+        this.darkModeListener = CoreSettingsHelper.onDarkModeChange().subscribe(() => {
+            this.setGradientColor();
+        });
     }
 
     /**
@@ -96,17 +119,16 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
      * @return Promise resolved when loadings are done.
      */
     protected async waitLoadingsDone(): Promise<void> {
-        this.domPromise = CoreDomUtils.waitToBeInDOM(this.element);
+        this.domPromise = CoreDom.waitToBeInDOM(this.element);
 
         await this.domPromise;
 
-        const page = this.element.closest('.ion-page');
-
-        if (!page) {
+        this.page = this.element.closest<HTMLElement>('.ion-page') || undefined;
+        if (!this.page) {
             return;
         }
 
-        await CoreComponentsRegistry.waitComponentsReady(page, 'core-loading', CoreLoadingComponent);
+        await CoreComponentsRegistry.waitComponentsReady(this.page, 'core-loading', CoreLoadingComponent);
     }
 
     /**
@@ -120,6 +142,15 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
      * Calculate the height and check if we need to display show more or not.
      */
     protected async calculateHeight(): Promise<void> {
+        if (this.loadingHeight) {
+            // Already calculating, return.
+            return;
+        }
+        this.loadingHeight = true;
+
+        this.visiblePromise = CoreDom.waitToBeVisible(this.element);
+        await this.visiblePromise;
+
         // Remove max-height (if any) to calculate the real height.
         this.element.classList.add('collapsible-loading-height');
 
@@ -131,7 +162,35 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
         this.element.classList.remove('collapsible-loading-height');
 
         // If cannot calculate height, shorten always.
-        this.setExpandButtonEnabled(!this.expandedHeight || this.expandedHeight >= this.maxHeight);
+        const enable = !this.expandedHeight || this.expandedHeight >= this.maxHeight;
+        this.setExpandButtonEnabled(enable);
+        this.setGradientColor();
+
+        this.loadingHeight = false;
+    }
+
+    /**
+     * Sets the gradient color based on the background.
+     */
+    protected setGradientColor(): void {
+        if (!this.toggleExpandEnabled) {
+            return;
+        }
+
+        let coloredElement: HTMLElement | null = this.element;
+        let backgroundColor = [0, 0, 0, 0];
+        let background = '';
+        while (coloredElement && backgroundColor[3] === 0) {
+            background = getComputedStyle(coloredElement).backgroundColor;
+            backgroundColor = CoreColors.getColorRGBA(background);
+            coloredElement = coloredElement.parentElement;
+        }
+
+        if (backgroundColor[3] !== 0) {
+            delete(backgroundColor[3]);
+            const bgList = backgroundColor.join(',');
+            this.element.style.setProperty('--background-gradient-rgb', `${bgList}`);
+        }
     }
 
     /**
@@ -153,6 +212,7 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
         const toggleButton = document.createElement('ion-button');
         toggleButton.classList.add('collapsible-toggle');
         toggleButton.setAttribute('fill', 'clear');
+        toggleButton.setAttribute('aria-controls', this.uniqueId);
 
         const toggleText = document.createElement('span');
         toggleText.classList.add('collapsible-toggle-text');
@@ -163,7 +223,7 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
         expandArrow.classList.add('collapsible-toggle-arrow');
         toggleButton.appendChild(expandArrow);
 
-        this.element.appendChild(toggleButton);
+        this.element.append(toggleButton);
 
         this.toggleExpand(this.expanded);
     }
@@ -194,6 +254,9 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
             expand = !this.expanded;
         }
         this.expanded = expand;
+
+        // Reset scroll inside the element to show always the top part.
+        this.element.scrollTo(0, 0);
         this.element.classList.toggle('collapsible-collapsed', !expand);
         this.setHeight(!expand ? this.maxHeight: undefined);
 
@@ -233,7 +296,13 @@ export class CoreCollapsibleItemDirective implements OnInit, OnDestroy {
      */
     ngOnDestroy(): void {
         this.resizeListener?.off();
+        this.darkModeListener?.unsubscribe();
         this.domPromise?.cancel();
+        this.visiblePromise?.cancel();
+
+        if (this.page && this.pageDidEnterListener) {
+            this.page.removeEventListener('ionViewDidEnter', this.pageDidEnterListener);
+        }
     }
 
 }

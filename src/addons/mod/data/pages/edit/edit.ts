@@ -40,6 +40,7 @@ import {
     AddonModDataEntryWSField,
 } from '../../services/data';
 import { AddonModDataHelper } from '../../services/data-helper';
+import { CoreDom } from '@singletons/dom';
 
 /**
  * Page that displays the view edit page.
@@ -162,31 +163,42 @@ export class AddonModDataEditPage implements OnInit {
             const entry = await AddonModDataHelper.fetchEntry(this.database, this.fieldsArray, this.entryId || 0);
             this.entry = entry.entry;
 
-            // Load correct group.
-            this.selectedGroup = this.entry.groupid;
+            if (this.entryId) {
+                // Load correct group.
+                this.selectedGroup = this.entry.groupid;
+            }
 
             // Check permissions when adding a new entry or offline entry.
             if (!this.isEditing) {
                 let haveAccess = false;
+                let groupInfo: CoreGroupInfo | undefined = this.groupInfo;
 
                 if (refresh) {
-                    this.groupInfo = await CoreGroups.getActivityGroupInfo(this.database.coursemodule);
-                    this.selectedGroup = CoreGroups.validateGroupId(this.selectedGroup, this.groupInfo);
+                    groupInfo = await CoreGroups.getActivityGroupInfo(this.database.coursemodule);
+                    if (groupInfo.visibleGroups && groupInfo.groups?.length) {
+                        // There is a bug in Moodle with All participants and visible groups (MOBILE-3597). Remove it.
+                        groupInfo.groups = groupInfo.groups.filter(group => group.id !== 0);
+                        groupInfo.defaultGroupId = groupInfo.groups[0].id;
+                    }
+
+                    this.selectedGroup = CoreGroups.validateGroupId(this.selectedGroup, groupInfo);
                     this.initialSelectedGroup = this.selectedGroup;
                 }
 
-                if (this.groupInfo?.groups && this.groupInfo.groups.length > 0) {
+                if (groupInfo?.groups && groupInfo?.groups.length > 0) {
                     if (refresh) {
                         const canAddGroup: Record<number, boolean> = {};
 
-                        await Promise.all(this.groupInfo.groups.map(async (group) => {
+                        await Promise.all(groupInfo.groups.map(async (group) => {
                             const accessData = await AddonModData.getDatabaseAccessInformation(this.database!.id, {
-                                cmId: this.moduleId, groupId: group.id });
+                                cmId: this.moduleId,
+                                groupId: group.id,
+                            });
 
                             canAddGroup[group.id] = accessData.canaddentry;
                         }));
 
-                        this.groupInfo.groups = this.groupInfo.groups.filter((group) => !!canAddGroup[group.id]);
+                        groupInfo.groups = groupInfo.groups.filter((group) => !!canAddGroup[group.id]);
 
                         haveAccess = canAddGroup[this.selectedGroup];
                     } else {
@@ -197,6 +209,8 @@ export class AddonModDataEditPage implements OnInit {
                     const accessData = await AddonModData.getDatabaseAccessInformation(this.database.id, { cmId: this.moduleId });
                     haveAccess = accessData.canaddentry;
                 }
+
+                this.groupInfo = groupInfo;
 
                 if (!haveAccess) {
                     // You shall not pass, go back.
@@ -352,9 +366,7 @@ export class AddonModDataEditPage implements OnInit {
                     }
                     this.jsData!.errors = this.errors;
 
-                    setTimeout(() => {
-                        this.scrollToFirstError();
-                    });
+                    this.scrollToFirstError();
                 }
             } finally {
                 modal.dismiss();
@@ -449,8 +461,9 @@ export class AddonModDataEditPage implements OnInit {
     /**
      * Scroll to first error or to the top if not found.
      */
-    protected scrollToFirstError(): void {
-        if (!CoreDomUtils.scrollToElementBySelector(this.formElement.nativeElement, this.content, '.addon-data-error')) {
+    protected async scrollToFirstError(): Promise<void> {
+        const scrolled = await CoreDom.scrollToElement(this.formElement.nativeElement, '.addon-data-error');
+        if (!scrolled) {
             this.content?.scrollToTop();
         }
     }

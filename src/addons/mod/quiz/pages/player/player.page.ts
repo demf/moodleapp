@@ -24,7 +24,6 @@ import { CoreNavigator } from '@services/navigator';
 import { CoreSites, CoreSitesReadingStrategy } from '@services/sites';
 import { CoreSync } from '@services/sync';
 import { CoreDomUtils } from '@services/utils/dom';
-import { CoreTimeUtils } from '@services/utils/time';
 import { CoreUtils } from '@services/utils/utils';
 import { ModalController, Translate } from '@singletons';
 import { CoreEvents } from '@singletons/events';
@@ -46,6 +45,8 @@ import { AddonModQuizAttempt, AddonModQuizHelper } from '../../services/quiz-hel
 import { AddonModQuizSync } from '../../services/quiz-sync';
 import { CanLeave } from '@guards/can-leave';
 import { CoreForms } from '@singletons/form';
+import { CoreDom } from '@singletons/dom';
+import { CoreTime } from '@singletons/time';
 
 /**
  * Page that allows attempting a quiz.
@@ -318,10 +319,8 @@ export class AddonModQuizPlayerPage implements OnInit, OnDestroy, CanLeave {
             this.loaded = true;
 
             if (slot !== undefined) {
-                // Scroll to the question. Give some time to the questions to render.
-                setTimeout(() => {
-                    this.scrollToQuestion(slot);
-                }, 2000);
+                // Scroll to the question.
+                this.scrollToQuestion(slot);
             }
         }
     }
@@ -353,7 +352,7 @@ export class AddonModQuizPlayerPage implements OnInit, OnDestroy, CanLeave {
             }
 
             if (this.quiz!.timelimit && this.quiz!.timelimit > 0) {
-                this.readableTimeLimit = CoreTimeUtils.formatTime(this.quiz.timelimit);
+                this.readableTimeLimit = CoreTime.formatTime(this.quiz.timelimit);
             }
 
             // Get access information for the quiz.
@@ -689,9 +688,8 @@ export class AddonModQuizPlayerPage implements OnInit, OnDestroy, CanLeave {
      * @param slot Slot of the question to scroll to.
      */
     protected scrollToQuestion(slot: number): void {
-        CoreDomUtils.scrollToElementBySelector(
+        CoreDom.scrollToElement(
             this.elementRef.nativeElement,
-            this.content,
             '#addon-mod_quiz-question-' + slot,
         );
     }

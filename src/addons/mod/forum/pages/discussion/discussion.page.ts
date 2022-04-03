@@ -33,6 +33,7 @@ import { CoreDomUtils } from '@services/utils/dom';
 import { CoreUtils } from '@services/utils/utils';
 import { Network, NgZone, Translate } from '@singletons';
 import { CoreArray } from '@singletons/array';
+import { CoreDom } from '@singletons/dom';
 import { CoreEventObserver, CoreEvents } from '@singletons/events';
 import { Subscription } from 'rxjs';
 import { AddonModForumDiscussionsSource } from '../../classes/forum-discussions-source';
@@ -187,13 +188,10 @@ export class AddonModForumDiscussionPage implements OnInit, AfterViewInit, OnDes
         const scrollTo = this.postId || this.parent;
         if (scrollTo) {
             // Scroll to the post.
-            setTimeout(() => {
-                CoreDomUtils.scrollToElementBySelector(
-                    this.elementRef.nativeElement,
-                    this.content,
-                    '#addon-mod_forum-post-' + scrollTo,
-                );
-            });
+            CoreDom.scrollToElement(
+                this.elementRef.nativeElement,
+                '#addon-mod_forum-post-' + scrollTo,
+            );
         }
     }
 
